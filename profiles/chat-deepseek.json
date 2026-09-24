@@ -1,0 +1,16 @@
+{
+  "name": "chat-deepseek",
+  "bundles": ["../bundles/core.json"],
+  "patch": [
+    {
+      "id": "llm",
+      "config": {
+        "provider": "deepseek",
+        "model": "deepseek-chat",
+        "apiKeyEnv": "DEEPSEEK_API_KEY",
+        "temperature": 0.3,
+        "timeoutMs": 120000
+      }
+    }
+  ]
+}

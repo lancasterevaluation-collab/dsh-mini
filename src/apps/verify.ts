@@ -35,11 +35,12 @@ const HERE = import.meta.dirname
 const ROOT = resolve(HERE, '../..')
 
 /**
- * 跑一条命令，收集退出码与输出尾部。
- * @param args 命令行参数（含 `node`）
+ * 跑一条命令，收集退出码与输出。
+ * @param args 命令行参数
+ * @param stdin 要写进子进程标准输入的内容（给交互式程序用；写完即关闭）
  * @returns 结果
  */
-function run(args: readonly string[]): Promise<CheckResult> {
+function run(args: readonly string[], stdin?: string): Promise<CheckResult> {
   const started = Date.now()
   return new Promise((resolvePromise) => {
     const child = spawn(process.execPath, [...args], {
@@ -47,6 +48,13 @@ function run(args: readonly string[]): Promise<CheckResult> {
       // 屏蔽 node:sqlite 的实验性警告 —— 零依赖用内置能力是有意为之
       env: { ...process.env, NODE_OPTIONS: '--disable-warning=ExperimentalWarning' },
     })
+
+    // ★ 交互式程序的验收就靠这里：把输入当成"用户在敲"，
+    //   所以 repl.ts 必须用 line 事件而不是 question()（见它的文件头）。
+    if (stdin !== undefined) {
+      child.stdin.write(stdin)
+      child.stdin.end()
+    }
 
     let output = ''
     child.stdout.on('data', (chunk: Buffer) => {
@@ -132,12 +140,79 @@ async function main(): Promise<void> {
   console.log(`${taskOk ? '✅' : '❌'} ${'cli 任务'.padEnd(26)} ${task.ms} ms`)
   if (!taskOk) console.log(task.tail.split('\n').map((line) => `   ${line}`).join('\n'))
 
+  // ── 对话框：多轮对话（输入从 stdin 灌进去，和真人敲键走同一条代码路径）──
+  const repl = await run(
+    [join('src', 'apps', 'repl.ts')],
+    ['看看这个目录里有什么', '读一下 notes.txt', '今天天气怎么样', '/stats', '/exit'].join('\n') + '\n',
+  )
+  const replOk = passes(repl, ['助手 ›', '离线规则模式', '轮次='])
+  results.push({ label: 'repl 对话框（4 轮）', ok: replOk, detail: `${repl.ms} ms` })
+  console.log(`${replOk ? '✅' : '❌'} ${'repl 对话框'.padEnd(26)} ${repl.ms} ms`)
+  if (!replOk) console.log(repl.tail.split('\n').map((line) => `   ${line}`).join('\n'))
+
+  // ── Web GUI：起服务 → 探测三个端点 → 关掉 ──
+  const web = await checkWebGui()
+  results.push({ label: 'web GUI 冒烟', ok: web.ok, detail: web.detail })
+  console.log(`${web.ok ? '✅' : '❌'} ${'web GUI'.padEnd(26)} ${web.detail}`)
+  if (!web.ok) console.log(`   ${web.detail}`)
+
   const passed = results.filter((item) => item.ok).length
   console.log(`\n======== 汇总 ========`)
   console.log(`  ${passed}/${results.length} 项通过`)
   for (const item of results.filter((entry) => !entry.ok)) console.log(`  ✗ ${item.label}（${item.detail}）`)
 
   process.exitCode = passed === results.length ? 0 : 1
+}
+
+/**
+ * Web GUI 冒烟测试：起服务、探端点、关服务。
+ *
+ * ★ 为什么必须自己起停，而不是"检查 HTML 文件存在"？★
+ * 因为那种检查在 `web.ts` 真的崩了的时候照样通过 ——
+ * 而"服务能起来、首页能返回、状态接口是合法 JSON"才是这个文件存在的意义。
+ * @returns 结果
+ */
+async function checkWebGui(): Promise<{ readonly ok: boolean; readonly detail: string }> {
+  const port = 8799
+  const started = Date.now()
+  const child = spawn(process.execPath, [join('src', 'apps', 'web.ts'), '--port', String(port)], {
+    cwd: ROOT,
+    env: { ...process.env, NODE_OPTIONS: '--disable-warning=ExperimentalWarning' },
+  })
+
+  let output = ''
+  child.stdout.on('data', (chunk: Buffer) => { output += chunk.toString() })
+  child.stderr.on('data', (chunk: Buffer) => { output += chunk.toString() })
+
+  try {
+    // 轮询等它就绪（最多 10 秒）—— 比固定 sleep 更稳，机器慢也不会误报
+    let ready = false
+    for (let attempt = 0; attempt < 40 && !ready; attempt += 1) {
+      await new Promise((r) => setTimeout(r, 250))
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/api/state`)
+        ready = response.ok
+      } catch {
+        ready = false
+      }
+    }
+    if (!ready) return { ok: false, detail: '服务 10 秒内没就绪' }
+
+    const home = await fetch(`http://127.0.0.1:${port}/`)
+    const html = await home.text()
+    if (!home.ok || !html.includes('<title>dsh-mini')) {
+      return { ok: false, detail: `首页异常：HTTP ${home.status}` }
+    }
+
+    const state = (await (await fetch(`http://127.0.0.1:${port}/api/state`)).json()) as { provider?: string }
+    if (state.provider === undefined) return { ok: false, detail: '状态接口缺少 provider 字段' }
+
+    return { ok: true, detail: `${Date.now() - started} ms（首页 ${html.length} 字节，provider=${state.provider}）` }
+  } catch (error) {
+    return { ok: false, detail: error instanceof Error ? error.message : String(error) }
+  } finally {
+    child.kill()
+  }
 }
 
 await main()

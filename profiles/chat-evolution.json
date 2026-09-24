@@ -1,0 +1,10 @@
+{
+  "name": "chat-evolution",
+  "bundles": ["../bundles/core.json", "../bundles/evolution.json"],
+  "patch": [
+    {
+      "id": "llm",
+      "config": { "provider": "local" }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "chat",
+  "bundles": ["../bundles/core.json"],
+  "patch": [
+    {
+      "id": "llm",
+      "config": { "provider": "local" }
+    }
+  ]
+}

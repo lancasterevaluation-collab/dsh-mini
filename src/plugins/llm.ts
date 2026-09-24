@@ -21,6 +21,7 @@
 
 import { DeepSeekProvider, MockProvider } from '../kernel/llm.ts'
 import { LLMError } from '../kernel/llm.ts'
+import { LocalProvider } from '../kernel/local-provider.ts'
 import type { ChatMessage, LLMResponse, MockStep, Provider } from '../kernel/llm.ts'
 import type { Plugin } from '../framework/context.ts'
 
@@ -37,7 +38,10 @@ declare module '../framework/events.ts' {
 
 /** 配置文件里这一段能写什么。 */
 export interface LLMConfig {
-  /** `mock`（离线）或 `deepseek`（真实调用）。默认 `mock`。 */
+  /**
+   * `mock`（脚本回放）/ `local`（离线规则，能应付交互式对话）/ `deepseek`（真实调用）。
+   * 默认 `mock`。
+   */
   readonly provider?: string
   /** 模型名。mock 模式下只是标签；deepseek 模式下是真正要发的 model。 */
   readonly model?: string
@@ -55,7 +59,7 @@ export interface LLMConfig {
 
 /** 解析后的模型配置：**生效值**，不再含默认值推断。 */
 export interface LLMSpec {
-  readonly kind: 'mock' | 'deepseek'
+  readonly kind: 'mock' | 'local' | 'deepseek'
   readonly model: string
   readonly apiKeyEnv: string
   readonly apiKey: string | undefined
@@ -79,8 +83,8 @@ export function resolveLLMSpec(config: LLMConfig | undefined): LLMSpec {
   const raw = config ?? {}
   const kind = raw.provider ?? 'mock'
 
-  if (kind !== 'mock' && kind !== 'deepseek') {
-    throw new Error(`llm 插件：未知的 provider "${kind}"；只支持 mock / deepseek`)
+  if (kind !== 'mock' && kind !== 'local' && kind !== 'deepseek') {
+    throw new Error(`llm 插件：未知的 provider "${kind}"；只支持 mock / local / deepseek`)
   }
 
   const apiKeyEnv = raw.apiKeyEnv ?? DEFAULT_API_KEY_ENV
@@ -101,7 +105,7 @@ export function resolveLLMSpec(config: LLMConfig | undefined): LLMSpec {
 
   return {
     kind,
-    model: raw.model ?? (kind === 'mock' ? 'mock' : 'deepseek-chat'),
+    model: raw.model ?? (kind === 'mock' ? 'mock' : kind === 'local' ? 'local-rules' : 'deepseek-chat'),
     apiKeyEnv,
     apiKey,
     baseUrl: raw.baseUrl,
@@ -164,7 +168,9 @@ export const llmPlugin: Plugin = {
 
     const inner: Provider = spec.kind === 'mock'
       ? new MockProvider(spec.script)
-      : new DeepSeekProvider({
+      : spec.kind === 'local'
+        ? new LocalProvider()
+        : new DeepSeekProvider({
           apiKey: spec.apiKey as string,
           ...(spec.baseUrl !== undefined ? { baseUrl: spec.baseUrl } : {}),
           model: spec.model,

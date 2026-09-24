@@ -20,6 +20,8 @@
   "scripts": {
     "verify": "node src/apps/verify.ts",
     "cli": "node src/apps/cli.ts",
+    "chat": "node src/apps/repl.ts",
+    "web": "node src/apps/web.ts --open",
     "dump": "node src/apps/cli.ts --profile profiles/evolution.json --dump ready",
     "demo:llm": "node src/demos/demo-llm.ts",
     "demo:tools": "node src/demos/demo-tools.ts",

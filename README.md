@@ -5,10 +5,12 @@
 ![Node](https://img.shields.io/badge/node-%E2%89%A522.18-3C873A?logo=node.js&logoColor=white)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strip--types-3178C6?logo=typescript&logoColor=white)
-![Acceptance](https://img.shields.io/badge/acceptance-18%2F18-success)
+![Acceptance](https://img.shields.io/badge/acceptance-20%2F20-success)
+![Interface](https://img.shields.io/badge/interface-CLI%20%C2%B7%20REPL%20%C2%B7%20Web%20GUI-7c5cff)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 不需要 `npm install`，不需要编译，不需要构建工具 —— `node src/apps/cli.ts "任务"` 就能跑。
+想在终端里聊天就 `node src/apps/repl.ts`，想要图形界面就 `node src/apps/web.ts --open`。
 
 ---
 
@@ -18,6 +20,7 @@
 - [与 DSH 的关系](#与-dsh-的关系)
 - [核心特性](#核心特性)
 - [架构](#架构)
+- [三种界面](#三种界面)
 - [目录结构](#目录结构)
 - [快速开始](#快速开始)
 - [用法](#用法)
@@ -54,16 +57,16 @@
 
 | 层 | 文件 | 行数 | 内容 |
 | --- | --- | --- | --- |
-| `kernel/` | 8 | 2462 | 纯能力：模型、工具、会话日志、循环、重试、守卫、检查点 |
+| `kernel/` | 9 | 2748 | 纯能力：模型、工具、会话日志、循环、重试、守卫、检查点、离线规则 provider |
 | `framework/` | 4 | 981 | 插件容器、waterfall 事件、作用域隔离、配置层叠装载器 |
-| `plugins/` | 10 | 1336 | 把 kernel 的能力包成插件，并定义扩展点 |
+| `plugins/` | 10 | 1340 | 把 kernel 的能力包成插件，并定义扩展点 |
 | `evolution/` | 9 | 1916 | 记忆、提醒、技能、用户建模、历史检索、诊断、演化门控、审计 |
-| `apps/` | 2 | 301 | CLI 入口 + 一键验收 |
+| `apps/` | 4 | 1138 | CLI、交互式对话框、Web GUI 服务端、一键验收 |
 | `demos/` | 16 | 2464 | 每一步的可运行演示 |
-| **合计** | **49** | **9460** | 零运行时依赖 |
+| **合计** | **52** | **10587** | 零运行时依赖 |
 
-另有 34 篇课程文档、22 个类型化事件（4 个框架级 + 18 个由插件用声明合并扩展）、
-5 个 profile、4 个 bundle、3 个 patch 示例。
+另有：前端单页 `src/apps/web-ui.html`（内嵌 CSS/JS，约 17 KB）、34 篇课程文档、
+22 个类型化事件（4 个框架级 + 18 个由插件用声明合并扩展）、8 个 profile、4 个 bundle、4 个 patch 示例。
 
 ## 与 DSH 的关系
 
@@ -133,6 +136,7 @@ dsh-mini/
 ├── src/
 │   ├── kernel/                    纯能力模块，不依赖框架
 │   │   ├── llm.ts                 Provider 接口 + MockProvider + DeepSeekProvider + 错误分类
+│   │   ├── local-provider.ts      离线规则 provider（无 key 时也能对话，会自报身份）
 │   │   ├── tools.ts               工具注册表 + JSON Schema + 递归参数校验 + 截断
 │   │   ├── builtin-tools.ts       read_file / write_file / list_dir / delete_file
 │   │   ├── session.ts             append-only 日志 + deriveMessages() + 统计
@@ -160,18 +164,54 @@ dsh-mini/
 │   │   ├── evolve.ts              演化门控（白名单 / 保护名单 / 回归 / 回滚）
 │   │   └── audit.ts               审计链（哈希链）
 │   ├── apps/
-│   │   ├── cli.ts                 唯一入口：装载 → dump → 跑任务 → 报告
-│   │   └── verify.ts              一键验收：16 个演示 + 2 个端到端检查
+│   │   ├── cli.ts                 一次一个任务：装载 → dump → 跑任务 → 报告
+│   │   ├── repl.ts                终端对话框：多轮对话 + / 命令
+│   │   ├── web.ts                 Web GUI 服务端：HTTP + SSE 事件流
+│   │   ├── web-ui.html            图形界面（单页，内嵌 CSS/JS）
+│   │   └── verify.ts              一键验收：16 个演示 + 4 个端到端检查
 │   └── demos/                     16 个演示，每一步一个
 ├── bundles/                       core.json（能力层）/ evolution.json（进化层）
-├── profiles/                      agent.json（离线）/ evolution.json（含进化层）等
-├── patches/                       命令行覆盖示例
+├── profiles/                      chat.json（对话）/ agent.json（离线）/ evolution.json 等
+├── patches/                       命令行覆盖示例（含放开审批、切真实模型）
 ├── skills/                        技能库落盘形式（.md）
 ├── workspace/                     agent 的沙箱工作目录
 ├── docs/                          34 篇课程与研究文档
-├── package.json                   scripts（npm 可用时可直接 `npm run verify`）
+├── package.json                   scripts（npm 可用时可直接 `npm run verify` / `npm run chat`）
 └── tsconfig.json                  只为编辑器与 `tsc --noEmit` 准备，运行不需要
 ```
+
+## 三种界面
+
+同一套 agent，三种用法。它们**共用全部内核**，区别只在输入输出这一层。
+
+| | 命令 | 适合 | 特点 |
+| --- | --- | --- | --- |
+| **CLI** | `node src/apps/cli.ts "任务"` | 脚本、CI、一次性任务 | 跑完即退；退出码真实（0/1/2） |
+| **对话框** | `node src/apps/repl.ts` | 在终端里连续聊 | 多轮上下文、`/` 命令、ANSI 配色 |
+| **Web GUI** | `node src/apps/web.ts --open` | 想看得舒服一点 | 浏览器界面、SSE 实时推送、工具调用卡片 |
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  apps/                                                      │
+│    cli.ts      repl.ts      web.ts ──► web-ui.html          │
+│       │           │            │                            │
+│       └───────────┴────────────┘                            │
+│                   │  都只做三件事：装载 / 把输入变成任务 / 渲染事件  │
+│                   ▼                                          │
+│           agent 服务（plugins/agent-loop.ts）                │
+│                   │                                          │
+│                   ▼                                          │
+│    会话事件（plugins/session.ts 的 session/event）            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**★ 关键点：三个界面都没有为"显示"单独造数据。** 它们消费的都是同一个
+`session/event` 事件流 —— 也就是第 7 步那条「Model-visible ⟺ logged」不变量的延伸：
+
+> 界面上能看到的，日志里一定有；日志里没有的，界面上也不会凭空出现。
+
+所以给 Web GUI 加一个展示（比如"守卫拦了几次"）不需要改 agent，
+只需要在前端多读一个事件字段 —— 这正是"能力挂扩展点"在界面层的体现。
 
 ## 快速开始
 
@@ -187,11 +227,17 @@ dsh-mini/
 git clone https://github.com/lancasterevaluation-collab/dsh-mini.git
 cd dsh-mini
 
-# 一键验收：16 个演示 + 2 个端到端检查
+# 一键验收：16 个演示 + 4 个端到端检查
 node src/apps/verify.ts
 
 # 跑一个真实任务（离线 mock 模型，会真的读写 workspace/ 里的文件）
 node src/apps/cli.ts "看看这个目录里有什么，然后读一下 README"
+
+# 在终端里聊天（多轮）
+node src/apps/repl.ts
+
+# 或者开一个图形界面
+node src/apps/web.ts --open
 ```
 
 第二条命令的真实输出（节选）：
@@ -220,6 +266,69 @@ node src/apps/cli.ts "看看这个目录里有什么，然后读一下 README"
 
 ## 用法
 
+### 对话式（推荐先试这个）
+
+```bash
+# 终端对话框
+node src/apps/repl.ts
+```
+
+```
+  dsh-mini · 对话框
+  profile    .../profiles/chat.json
+  模型       local（local-rules）
+  工作目录   .../dsh-mini/workspace
+  ⚠ 离线规则模式：只认几条关键词，不是真模型。
+
+你 › 看看这个目录里有什么
+  ⚙ list_dir
+  ✓ README.md
+助手 › （离线规则模式）工作目录里有 5 个条目：
+  · .sessions/
+  · README.md
+  · guard-demo/
+  · important.txt
+  · notes.txt
+  complete · 2 步 · 3 ms
+```
+
+对话框里的命令：`/help`、`/new`（开新会话）、`/stats`、`/dump`、`/spec`、`/exit`。
+加了 `--events` 会把全部会话事件都打出来（排查时有用）。
+
+```bash
+# 图形界面：浏览器打开 http://127.0.0.1:8787
+node src/apps/web.ts --open
+node src/apps/web.ts --port 9000            # 换端口
+```
+
+界面上有：顶栏状态（模型、工作目录、轮次/步数/工具/守卫）、消息气泡、
+可折叠的**工具调用卡片**、守卫拦截与重试标记、示例问题一键填入。
+它通过 **SSE** 接收事件 —— 也就是说页面上的每一条都来自会话日志。
+
+**两个界面都支持多轮对话**，而且这几乎是"免费"的：会话日志是唯一真相，
+复用同一个会话，模型下一轮就自动看得到全部历史（详见 [`docs/07-session.md`](docs/07-session.md)）。
+
+### 没有 API key 也想聊？
+
+默认的 `profiles/chat.json` 用的是 **`local` provider** —— 一个**规则匹配**的离线实现
+（`kernel/local-provider.ts`），能识别"看看目录 / 读某个文件 / 介绍这个项目"这几类意图，
+其余的会明确回答：
+
+```
+助手 › 我没法回答「今天天气怎么样」—— 我是【离线规则模式】，只认几条关键词规则。
+```
+
+**它会自报身份，绝不假装是语言模型** —— 这跟 `MockProvider` 的立场一致：
+演示可以简化，但不能让人对系统的能力产生错误判断。
+
+要真正的对话：
+
+```bash
+export DEEPSEEK_API_KEY=sk-...                                   # PowerShell: $env:DEEPSEEK_API_KEY = "sk-..."
+node src/apps/repl.ts --profile profiles/chat-deepseek.json
+node src/apps/web.ts  --profile profiles/chat-deepseek.json --open
+```
+
 ### 跑一个任务
 
 ```bash
@@ -227,6 +336,7 @@ node src/apps/cli.ts "任务描述"
 ```
 
 任务描述是位置参数，所有非开关的词会被拼成一句话。
+CLI 与对话框的区别是：**它跑完就退出**，不保留多轮上下文 —— 适合脚本与 CI。
 
 ### 换 profile
 
@@ -327,16 +437,25 @@ node src/apps/verify.ts
 ✅ demo-agent.ts              135 ms
 ✅ demo-context.ts            119 ms
 ✅ demo-diagnose.ts           171 ms
-... （16 个演示）
-✅ cli --dump                 205 ms
-✅ cli 任务                   207 ms
+... （16 个演示，每一步一个）
+✅ cli --dump                 168 ms
+✅ cli 任务                   180 ms
+✅ repl 对话框                147 ms
+✅ web GUI                    301 ms（首页 16656 字节，provider=local）
 
 ======== 汇总 ========
-  18/18 项通过
+  20/20 项通过
 ```
 
-每一个演示都**带期望输出**：只检查退出码会让"什么都没跑"也算通过，
+每一项都**带期望输出**：只检查退出码会让"什么都没跑"也算通过，
 所以 `verify.ts` 还会在输出里找那句"它确实跑到了结论"的标记。
+
+后两项是端到端检查，它们各自解决一个"看起来能过、其实没验证"的陷阱：
+
+| 检查 | 陷阱 | 做法 |
+| --- | --- | --- |
+| `repl 对话框` | 交互式程序**只能人工敲**才验证得到 | 把输入写进子进程 stdin —— 与真人敲键走同一条代码路径（这也是 `repl.ts` 用 `line` 事件而不是 `question()` 的原因） |
+| `web GUI` | 只检查"HTML 文件存在"的话，`web.ts` 崩了照样通过 | 真的起服务 → 轮询等就绪 → 请求首页与状态接口 → 关掉 |
 
 ## 关键设计决策
 
@@ -421,7 +540,7 @@ retry 是一个监听 agent/request-error 的插件；
 
 三个具体原因：这台机器上 npm 不可用；依赖会掩盖"哪些能力是框架必需的"这个问题
 （比如"日志检索"用 `node:sqlite` 就够了，不需要装一个数据库客户端）；
-以及 9 千行代码里你能读懂每一行。
+以及一万行代码里你能读懂每一行。
 
 `node:sqlite` 是 Node 内置的实验性 API，会打印一条 `ExperimentalWarning` ——
 这是零依赖的直接后果。代码里用 `--disable-warning=ExperimentalWarning` 屏蔽它。
@@ -461,18 +580,39 @@ rm -rf workspace/.sessions workspace/.checkpoints workspace/guard-demo
 **Q：真的能连真实模型吗？**
 
 能，`DeepSeekProvider` 已实现（OpenAI 兼容协议）。但这台开发机上没有 key，
-所以**所有演示与验收都跑在 `MockProvider` 上** —— 这一点没有含糊：
-仓库里没有任何"假装调用过真实模型"的输出。
+所以**所有演示与验收都跑在离线 provider 上**（`MockProvider` 或规则式的 `LocalProvider`）——
+这一点没有含糊：仓库里没有任何"假装调用过真实模型"的输出。
+
+**Q：界面能改吗？加一个展示要动 agent 吗？**
+
+不用动 agent。三个界面消费的都是同一个 `session/event` 事件流：
+
+| 想加什么 | 改哪里 |
+| --- | --- |
+| 界面展示（颜色、布局、卡片、动效） | `src/apps/web-ui.html`（纯前端，改完刷新即可） |
+| 界面能看到的**新信息** | 前端多读一个事件字段；字段不存在就先在对应插件里补一条事件 |
+| 一个新的界面（比如 TUI） | 新写一个 `apps/*.ts`，装载 profile + 消费事件 —— 参考 `repl.ts` 的 200 行骨架 |
+
+**Q：为什么不做成常驻服务 / 桌面应用？**
+
+Web GUI **是**常驻的（`web.ts` 会一直跑，直到 Ctrl+C），但它只监听 `127.0.0.1`，
+不做鉴权、不做多用户 —— 它是"本机开发者的界面"，不是可以部署出去的服务。
+桌面应用（Electron）需要 `npm install` 几百兆，本机 npm 不可用，所以那是不可行而非取舍。
+
+**Q：Windows 上有个 `ExperimentalWarning: SQLite ...` 警告要紧吗？**
+
+不要紧，那是 `node:sqlite`（第 14 步的历史检索用它做 FTS5）的实验性提示。
+`verify.ts` 与 `repl.ts` 都已经用 `--disable-warning=ExperimentalWarning` 屏蔽了它。
 
 ## 项目状态与局限
 
-**已完成**：16 步全部实现并通过验收（18/18）。
+**已完成**：16 步全部实现，三种界面（CLI / 对话框 / Web GUI）可用，验收 20/20 通过。
 
 **没有做的，以及为什么**：
 
 | 未覆盖 | 原因 | 补齐路径 |
 | --- | --- | --- |
-| Web GUI / Electron 桌面 | 需要前端工程技能，与架构正交 | 另开一门课 |
+| Electron / Tauri 桌面应用 | 需要 `npm install` 几百兆，本机 npm 不可用 | 用 Web GUI，或者自己做壳 |
 | 跨语言 SDK / RPC 协议 | 需要协议设计与代码生成 | 读 `docs/reference/dsh-architecture.md` |
 | OS 级沙箱（bwrap / Landlock） | 需要系统编程 | 本项目只做策略层（`guard`） |
 | LSP / PTY 终端 / 浏览器自动化 | 属于"能力插件"，不属于架构 | 会了框架后按 DSH 的 `packages/README.md` 逐个看 |
@@ -482,7 +622,10 @@ rm -rf workspace/.sessions workspace/.checkpoints workspace/guard-demo
 **已知的真实缺陷**（每个模块的文件头与 `docs/` 的 L4 章节都列了，这里挑几个）
 
 - `kernel/agent.ts` 的工具调用是**串行**的，没有并行工具池。
-- 用户建模的信号提取是**正则规则**：会漏掉同义表达（"简洁"匹配不到"简短"那条规则）。
+- `LocalProvider` 的意图匹配是**关键词规则**：问法一变就落回兜底回答，也不理解代词。
+- 三个界面**都没有流式输出**：回答是整段出现的（`Provider` 接口是单次返回，改成流式要动第 1 步）。
+- 对话框的上下文**只增不减**：聊久了每次请求都带着全部历史，`/new` 是当前唯一对策。
+- 用户建模的信号提取也是正则：会漏掉同义表达（"简洁"匹配不到"简短"那条规则）。
 - `diagnose.ts` 的规则只看"有没有"、不看"多少"：一次工具失败和十次归因相同。
 - 审计链只在内存里，进程退出即丢（`AuditLog.toJSON()` 已经可用，接落盘即可）。
 - 演化门控的回归用例是 3 条内置探针，覆盖太窄，发现不了大部分退化。
@@ -496,6 +639,17 @@ rm -rf workspace/.sessions workspace/.checkpoints workspace/guard-demo
 2. 建 `src/plugins/<名字>.ts`，导出 `default` 一个 `Plugin`，在 `apply` 里注册服务。
 3. 在 `bundles/*.json` 里加一行（`plugin` 路径相对 bundle 文件所在目录）。
 4. `node src/apps/cli.ts --dump` 能看到这一行；卸载它（`"disabled": true`）后行为回到原样。
+
+### 加一个新界面（或者改现有界面）
+
+界面的三条纪律：
+
+1. **不要为界面造数据。** 消费 `session/event`；缺信息就先补一条事件（那才是"能力"），
+   而不是在界面层另起一份状态 —— 否则迟早出现"界面显示的和日志里的不一样"。
+2. **前端用 `textContent`，不要 `innerHTML` 拼内容。** 助手回答与工具输出都是外部数据，
+   一次 `innerHTML` 就能让工具结果里的 `<script>` 变成真的脚本。
+3. **交互式程序必须能被自动化验收。** 用 `line` 事件而不是 `await question()` ——
+   后者在非 TTY 的 stdin 上会永久挂起，等于"只有人手敲才能验证"。
 
 ### 两条最容易踩的坑
 
@@ -513,7 +667,7 @@ rm -rf workspace/.sessions workspace/.checkpoints workspace/guard-demo
 
 欢迎 issue 与 PR。三条要求：
 
-1. **先跑验收**：`node src/apps/verify.ts` 必须 18/18 通过，新增演示要在
+1. **先跑验收**：`node src/apps/verify.ts` 必须 20/20 通过，新增演示要在
    `verify.ts` 的 `expectations` 里登记期望输出。
 2. **改动分层不能倒**：`kernel/` 不许 import `framework/`，`plugins/` 不许 import `apps/`。
 3. **缺陷要坦白**：新增模块的文件头要写清它的真实缺陷，不要写"以后会做"来冒充。
