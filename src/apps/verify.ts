@@ -114,6 +114,7 @@ async function main(): Promise<void> {
     'demo-diagnose.ts': ['长度不一致被拒绝'],
     'demo-evolve.ts': ['回滚记录'],
     'demo-evolution-loop.ts': ['审计链校验'],
+    'demo-modes.ts': ['同一份 profile、同一套内核', '这就是 PTC 的核心收益', '这个摩擦是有意的'],
   }
 
   console.log('======== 验收：逐条跑演示与端到端检查 ========\n')
@@ -155,6 +156,24 @@ async function main(): Promise<void> {
   results.push({ label: 'web GUI 冒烟', ok: web.ok, detail: web.detail })
   console.log(`${web.ok ? '✅' : '❌'} ${'web GUI'.padEnd(26)} ${web.detail}`)
   if (!web.ok) console.log(`   ${web.detail}`)
+
+  // ── 模式系统：列出、装配、以及"模式真的改了装配" ──
+  const modeList = await run([join('src', 'apps', 'cli.ts'), '--list-modes'])
+  const modeListOk = passes(modeList, ['standard', 'ptc', 'minimal', 'creator', 'multi-agent'])
+  results.push({ label: '模式列表', ok: modeListOk, detail: `${modeList.ms} ms` })
+  console.log(`${modeListOk ? '✅' : '❌'} ${'模式列表'.padEnd(26)} ${modeList.ms} ms`)
+
+  const minimalDump = await run([
+    join('src', 'apps', 'cli.ts'), '--profile', join('profiles', 'chat.json'),
+    '--mode', 'minimal', '--dump', '占位',
+  ])
+  // 最小模式必须**只剩** run_command，且 multi-agent 行被禁用 —— 这两条才是"模式生效"的证据
+  const minimalOk =
+    passes(minimalDump, ['"builtin":["run_command"]', '已禁用']) &&
+    !minimalDump.output.includes('"builtin":["read_file"')
+  results.push({ label: '模式改造装配（minimal）', ok: minimalOk, detail: `${minimalDump.ms} ms` })
+  console.log(`${minimalOk ? '✅' : '❌'} ${'模式改造装配'.padEnd(26)} ${minimalDump.ms} ms`)
+  if (!minimalOk) console.log(minimalDump.tail.split('\n').map((line) => `   ${line}`).join('\n'))
 
   const passed = results.filter((item) => item.ok).length
   console.log(`\n======== 汇总 ========`)

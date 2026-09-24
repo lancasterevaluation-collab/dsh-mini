@@ -41,6 +41,9 @@ import { spawn } from 'node:child_process'
 import { resolve } from 'node:path'
 import { loadProfile } from '../framework/loader.ts'
 import type { LoadedProfile } from '../framework/loader.ts'
+import { listModes, listModesDetailed, resolveMode, saveCustomMode } from './shared-mode.ts'
+import type { ResolvedMode } from './shared-mode.ts'
+import { TOOL_CATALOG } from '../plugins/tools.ts'
 import type { AgentService } from '../plugins/agent-loop.ts'
 import type { LLMSpec } from '../plugins/llm.ts'
 import type { SessionEvent } from '../kernel/session.ts'
@@ -61,6 +64,7 @@ interface WebArgs {
   readonly patches: readonly string[]
   readonly port: number
   readonly open: boolean
+  readonly mode: string | undefined
 }
 
 /**
@@ -73,11 +77,17 @@ function parseArgs(argv: readonly string[]): WebArgs {
   let profile = resolve(HERE, '../../profiles/chat.json')
   let port = DEFAULT_PORT
   let open = false
+  let mode: string | undefined
   const patches: string[] = []
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index] as string
-    if (token === '--profile') {
+    if (token === '--mode') {
+      index += 1
+      const value = argv[index]
+      if (value === undefined) throw new Error('--mode 后面要跟模式 id（界面里也能切换）')
+      mode = value
+    } else if (token === '--profile') {
       index += 1
       const value = argv[index]
       if (value === undefined) throw new Error('--profile 后面要跟文件路径')
@@ -101,7 +111,7 @@ function parseArgs(argv: readonly string[]): WebArgs {
     }
   }
 
-  return { profile, patches, port, open }
+  return { profile, patches, port, open, mode }
 }
 
 // ============================================================
@@ -128,6 +138,11 @@ interface ServerState {
   readonly model: string
   readonly workspace: string
   readonly running: boolean
+  /** 当前模式 id 与显示名。 */
+  readonly mode: string
+  readonly modeName: string
+  /** 当前模式实际装载的工具（面板要显示"这个模式装了什么"）。 */
+  readonly modeTools: readonly string[]
   readonly turns: number
   readonly steps: number
   readonly messages: number
@@ -201,6 +216,7 @@ function translate(event: SessionEvent): ClientMessage | undefined {
 class WebServer {
   readonly #args: WebArgs
   #loaded: LoadedProfile
+  #mode: ResolvedMode
   #spec: LLMSpec | undefined
   readonly #clients = new Set<ServerResponse>()
   #running = false
@@ -209,10 +225,12 @@ class WebServer {
   /**
    * @param args 参数
    * @param loaded 已装载的 profile
+   * @param mode 当前模式
    */
-  constructor(args: WebArgs, loaded: LoadedProfile) {
+  constructor(args: WebArgs, loaded: LoadedProfile, mode: ResolvedMode) {
     this.#args = args
     this.#loaded = loaded
+    this.#mode = mode
     this.#spec = loaded.ctx.get<LLMSpec>('llm/spec')
   }
 
@@ -231,6 +249,9 @@ class WebServer {
       model: this.#spec?.model ?? '?',
       workspace: this.#loaded.ctx.get<string>('workspace') ?? '?',
       running: this.#running,
+      mode: this.#mode.summary.id,
+      modeName: this.#mode.summary.name,
+      modeTools: this.#loaded.ctx.get<{ readonly names: () => string[] }>('tools')?.names() ?? [],
       turns: stats?.turns ?? 0,
       steps: stats?.steps ?? 0,
       messages: stats?.messages ?? 0,
@@ -306,16 +327,97 @@ class WebServer {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/reset') {
-      this.#loaded.unloadAll()
-      this.#loaded = await loadProfile(this.#args.profile, this.#args.patches)
-      this.#spec = this.#loaded.ctx.get<LLMSpec>('llm/spec')
-      this.#wireEvents()
+      await this.reload(this.#mode.summary.id)
       this.#json(res, 200, this.#state())
       this.#broadcast({ type: 'state', state: this.#state() })
       return
     }
 
+    // ── 模式：列出 / 切换 / 保存自定义 ──
+
+    if (req.method === 'GET' && url.pathname === '/api/modes') {
+      this.#json(res, 200, await listModesDetailed())
+      return
+    }
+
+    // 可装配的组件清单（界面用它渲染勾选框）
+    if (req.method === 'GET' && url.pathname === '/api/tools') {
+      this.#json(res, 200, TOOL_CATALOG)
+      return
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/mode') {
+      const body = await readBody(req)
+      let id = ''
+      try {
+        id = String((JSON.parse(body) as { id?: unknown }).id ?? '').trim()
+      } catch {
+        this.#json(res, 400, { error: '请求体不是合法 JSON' })
+        return
+      }
+      if (id === '') {
+        this.#json(res, 400, { error: '缺少 id' })
+        return
+      }
+      try {
+        await this.reload(id)
+        this.#json(res, 200, this.#state())
+        this.#broadcast({ type: 'state', state: this.#state() })
+      } catch (error) {
+        this.#json(res, 400, { error: error instanceof Error ? error.message : String(error) })
+      }
+      return
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/custom-mode') {
+      const body = await readBody(req)
+      try {
+        const draft = JSON.parse(body) as {
+          id?: unknown
+          name?: unknown
+          description?: unknown
+          tools?: unknown
+          maxSteps?: unknown
+          promptText?: unknown
+        }
+        const id = await saveCustomMode({
+          id: String(draft.id ?? ''),
+          name: String(draft.name ?? ''),
+          description: String(draft.description ?? ''),
+          tools: Array.isArray(draft.tools) ? draft.tools.map((item) => String(item)) : [],
+          maxSteps: Number(draft.maxSteps ?? 8),
+          promptText: String(draft.promptText ?? ''),
+        })
+        await this.reload(id)
+        this.#json(res, 200, { id, state: this.#state() })
+        this.#broadcast({ type: 'state', state: this.#state() })
+      } catch (error) {
+        this.#json(res, 400, { error: error instanceof Error ? error.message : String(error) })
+      }
+      return
+    }
+
     this.#json(res, 404, { error: 'not found' })
+  }
+
+  /**
+   * 换一个模式（重新装载）。
+   *
+   * 为什么不"只换工具"：工具集、提示词、守卫、步数上限都在**装载期**确定
+   * （第 3 步的取舍）。重装是唯一不破坏这条规则的路径 —— 而且它自带回滚与校验。
+   * @param modeId 目标模式 id
+   * @throws 模式不存在、或装载失败时
+   */
+  async reload(modeId: string): Promise<void> {
+    const mode = await resolveMode(modeId)
+    this.#loaded.unloadAll()
+    this.#loaded = await loadProfile(this.#args.profile, this.#args.patches, {
+      transformRows: mode.transformRows,
+    })
+    this.#mode = mode
+    this.#spec = this.#loaded.ctx.get<LLMSpec>('llm/spec')
+    // ★ 重装后必须重新挂事件 —— ctx 是新的，否则界面会静默不再更新
+    this.#wireEvents()
   }
 
   /** 处理一次提问。 */
@@ -420,8 +522,9 @@ async function main(): Promise<number> {
   let loaded: LoadedProfile | undefined
 
   try {
-    loaded = await loadProfile(args.profile, args.patches)
-    const server = new WebServer(args, loaded)
+    const mode = await resolveMode(args.mode)
+    loaded = await loadProfile(args.profile, args.patches, { transformRows: mode.transformRows })
+    const server = new WebServer(args, loaded, mode)
     await server.loadHtml()
 
     const http = createServer((req, res) => {
@@ -453,6 +556,8 @@ async function main(): Promise<number> {
     const spec = loaded.ctx.get<LLMSpec>('llm/spec')
     console.log('\n  dsh-mini · Web GUI')
     console.log(`  地址       ${url}`)
+    console.log(`  模式       ${mode.summary.id} · ${mode.summary.name}`)
+    console.log(`  工具       ${(loaded.ctx.get<{ names: () => string[] }>('tools')?.names() ?? []).join(', ')}`)
     console.log(`  profile    ${args.profile}`)
     console.log(`  模型       ${spec?.kind ?? '?'}（${spec?.model ?? '?'}）`)
     console.log(`  工作目录   ${loaded.ctx.get<string>('workspace') ?? '?'}`)

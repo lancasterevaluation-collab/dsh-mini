@@ -49,6 +49,9 @@ import { stdin, stdout } from 'node:process'
 import { resolve } from 'node:path'
 import { loadProfile } from '../framework/loader.ts'
 import type { LoadedProfile } from '../framework/loader.ts'
+import { listModes, resolveMode } from './shared-mode.ts'
+import type { ResolvedMode } from './shared-mode.ts'
+import { ToolRegistry } from '../kernel/tools.ts'
 import type { AgentService } from '../plugins/agent-loop.ts'
 import type { RetryService } from '../plugins/retry.ts'
 import type { LLMSpec } from '../plugins/llm.ts'
@@ -79,6 +82,8 @@ const paint = {
 interface ReplArgs {
   readonly profile: string
   readonly patches: readonly string[]
+  /** 可变：`/mode <id>` 会在运行时改它并重装。 */
+  mode: string | undefined
   readonly showAllEvents: boolean
 }
 
@@ -91,6 +96,7 @@ interface ReplArgs {
 function parseArgs(argv: readonly string[]): ReplArgs {
   let profile = resolve(HERE, '../../profiles/chat.json')
   const patches: string[] = []
+  let mode: string | undefined
   let showAllEvents = false
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -105,6 +111,11 @@ function parseArgs(argv: readonly string[]): ReplArgs {
       const value = argv[index]
       if (value === undefined) throw new Error('--patch 后面要跟文件路径')
       patches.push(resolve(value))
+    } else if (token === '--mode') {
+      index += 1
+      const value = argv[index]
+      if (value === undefined) throw new Error('--mode 后面要跟模式 id（用 --list-modes 看有哪些）')
+      mode = value
     } else if (token === '--events') {
       showAllEvents = true
     } else if (token.startsWith('--')) {
@@ -112,7 +123,7 @@ function parseArgs(argv: readonly string[]): ReplArgs {
     }
   }
 
-  return { profile, patches, showAllEvents }
+  return { profile, patches, mode, showAllEvents }
 }
 
 // ============================================================
@@ -122,6 +133,7 @@ function parseArgs(argv: readonly string[]): ReplArgs {
 /** 一次装载之后要长期持有的引用。 */
 interface Booted {
   readonly loaded: LoadedProfile
+  readonly mode: ResolvedMode
   readonly agent: AgentService
   readonly session: Session
   readonly retry: RetryService | undefined
@@ -149,7 +161,9 @@ function renderEvent(event: SessionEvent): string | undefined {
  * @throws profile 里没有 agent 服务时
  */
 async function boot(args: ReplArgs, announce: boolean): Promise<Booted> {
-  const loaded = await loadProfile(args.profile, args.patches)
+  // 模式：解析 → 作为"装载前加工"的钩子交给装载器（与 CLI 走同一条路径）
+  const mode = await resolveMode(args.mode)
+  const loaded = await loadProfile(args.profile, args.patches, { transformRows: mode.transformRows })
   const ctx = loaded.ctx
 
   const agent = ctx.get<AgentService>('agent')
@@ -161,6 +175,8 @@ async function boot(args: ReplArgs, announce: boolean): Promise<Booted> {
 
   if (announce) {
     console.log(paint.bold('\n  dsh-mini · 对话框'))
+    console.log(paint.cyan(`  模式       ${mode.summary.id} · ${mode.summary.name}`))
+    console.log(paint.gray(`  工具       ${(ctx.get<ToolRegistry>('tools')?.names() ?? []).join(', ')}`))
     console.log(paint.gray(`  profile    ${args.profile}`))
     console.log(paint.gray(`  模型       ${spec?.kind ?? '?'}（${spec?.model ?? '?'}）`))
     console.log(paint.gray(`  工作目录   ${ctx.get<string>('workspace') ?? '?'}`))
@@ -184,18 +200,26 @@ async function boot(args: ReplArgs, announce: boolean): Promise<Booted> {
     return next()
   })
 
-  return { loaded, agent, session: agent.session, retry: ctx.get<RetryService>('retry'), spec }
+  return { loaded, mode, agent, session: agent.session, retry: ctx.get<RetryService>('retry'), spec }
 }
 
 /** 帮助文本。 */
 const HELP = [
   paint.bold('  命令'),
   '    /help     显示这份帮助',
+  '    /mode     看当前模式与可用模式；/mode <id> 直接切换',
   '    /new      开一个新会话（重新装载，清空对话上下文）',
   '    /stats    当前会话统计',
   '    /dump     打印最终生效的插件配置',
   '    /spec     打印生效的模型配置',
   '    /exit     退出（Ctrl+C 也行）',
+  '',
+  paint.bold('  五个模式（--mode <id> 启动，或 /mode <id> 切换）'),
+  '    standard     常规：四个文件工具',
+  '    ptc          含常规 + run_program（写程序批量调工具，中间结果不进上下文）',
+  '    minimal      只有一个终端工具 run_command（对照组）',
+  '    creator      写技能 / 写插件，改造系统本身',
+  '    multi-agent  派发子智能体（各有独立会话与工具集）',
   '',
   paint.bold('  离线模式下能问什么'),
   '    看看这个目录里有什么',
@@ -246,6 +270,35 @@ async function main(): Promise<number> {
           state = await boot(args, false)
           loadedRef = state.loaded
           console.log(paint.gray(`\n  已开新会话（${state.session.id}），对话上下文已清空。\n`))
+          return false
+        }
+
+        if (command === 'mode') {
+          const target = line.slice(1).split(/\s+/)[1]
+
+          if (target === undefined) {
+            const available = await listModes()
+            console.log(paint.bold(`\n  当前模式：${state.mode.summary.id} · ${state.mode.summary.name}`))
+            console.log(paint.gray(`  ${state.mode.summary.description}`))
+            console.log(paint.gray(`  工具：${state.mode.summary.tools.join(', ')}`))
+            console.log(paint.bold('\n  可用模式'))
+            for (const item of available) {
+              const mark = item.id === state.mode.summary.id ? paint.green('  ← 当前') : ''
+              console.log(`    ${item.id.padEnd(14)} ${item.name}${mark}`)
+            }
+            console.log(paint.gray('\n  切换：/mode <id>\n'))
+            return false
+          }
+
+          // ★ 切换模式 = 改参数 + 重装。
+          //   不给"运行时热换装配"留后门：服务与工具都在装载期确定（第 3 步的取舍），
+          //   所以换模式就该老老实实走一遍装载 —— 那条路径有回滚、有依赖校验、有 dump。
+          args.mode = target
+          state.loaded.unloadAll()
+          state = await boot(args, false)
+          loadedRef = state.loaded
+          console.log(paint.green(`\n  已切到模式 ${state.mode.summary.id}（${state.mode.summary.name}）`))
+          console.log(paint.gray(`  工具现在是：${state.mode.summary.tools.join(', ')}\n`))
           return false
         }
 

@@ -1,7 +1,8 @@
-# 运行产物：会话日志、检查点、临时目录
+# 运行产物：会话日志、检查点、PTC 程序、临时目录
 tmp/
 workspace/.sessions/
 workspace/.checkpoints/
+workspace/.ptc/
 workspace/guard-demo/
 
 # 编辑器与系统

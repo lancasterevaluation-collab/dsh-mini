@@ -125,6 +125,14 @@ export const agentLoopPlugin: Plugin = {
     const service: AgentService = {
       session,
       async runTask(task, signal) {
+        // ★ 模式提供的系统提示词：写进日志（`session/system-prompt`），
+        //   再由 deriveMessages 派生成 role: 'system' 的消息 ——
+        //   于是"模型当时看到的提示词是什么"是可查的，而不是内存里的隐状态。
+        const prompt = ctx.get<string>('prompt')
+        if (typeof prompt === 'string' && prompt !== '') {
+          session.setSystemPrompt(prompt, ctx.get<string>('prompt/mode'))
+        }
+
         await ctx.emit('agent/turn-start', { task, turn: session.stats().turns + 1 })
 
         // ★ 扩展点 ①：任务在交给模型前可以被改写（nudge 就挂在这里）

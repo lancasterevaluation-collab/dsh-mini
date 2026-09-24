@@ -22,6 +22,7 @@
     "cli": "node src/apps/cli.ts",
     "chat": "node src/apps/repl.ts",
     "web": "node src/apps/web.ts --open",
+    "modes": "node src/apps/cli.ts --list-modes",
     "dump": "node src/apps/cli.ts --profile profiles/evolution.json --dump ready",
     "demo:llm": "node src/demos/demo-llm.ts",
     "demo:tools": "node src/demos/demo-tools.ts",
@@ -38,6 +39,7 @@
     "demo:recall": "node src/demos/demo-recall.ts",
     "demo:diagnose": "node src/demos/demo-diagnose.ts",
     "demo:evolve": "node src/demos/demo-evolve.ts",
-    "demo:loop": "node src/demos/demo-evolution-loop.ts"
+    "demo:loop": "node src/demos/demo-evolution-loop.ts",
+    "demo:modes": "node src/demos/demo-modes.ts"
   }
 }

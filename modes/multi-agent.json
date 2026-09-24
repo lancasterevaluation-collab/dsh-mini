@@ -1,0 +1,16 @@
+{
+  "id": "multi-agent",
+  "name": "多智能体模式",
+  "description": "主从派发：主 agent 可以把子任务派给一个或多个子智能体（各有独立会话、独立工具集、独立步数预算），拿回结论后汇总。适合过程冗长但结论短的子任务，以及可并行的独立子任务。启用这个模式会装载 multi-agent 插件，于是 spawn_agent 工具出现。",
+  "builtin": true,
+  "prompt": "multi-agent.md",
+  "tools": ["read_file", "write_file", "list_dir"],
+  "skills": [],
+  "llm": { "temperature": 0 },
+  "guard": {
+    "rules": ["loop", "irreversible", "quota", "path"],
+    "maxCalls": 16,
+    "approve": []
+  },
+  "limits": { "maxSteps": 14 }
+}

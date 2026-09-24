@@ -32,6 +32,7 @@
 import { resolve } from 'node:path'
 import { loadProfile } from '../framework/loader.ts'
 import type { LoadedProfile } from '../framework/loader.ts'
+import { listModes, resolveMode } from './shared-mode.ts'
 import type { AgentService } from '../plugins/agent-loop.ts'
 import type { RetryService } from '../plugins/retry.ts'
 import type { SessionEvent } from '../kernel/session.ts'
@@ -42,6 +43,8 @@ interface CliArgs {
   readonly profile: string
   readonly patches: readonly string[]
   readonly dumpOnly: boolean
+  readonly listModes: boolean
+  readonly mode: string | undefined
   readonly maxSteps: number | undefined
 }
 
@@ -58,6 +61,8 @@ function parseArgs(argv: readonly string[]): CliArgs {
   let profile = resolve(HERE, '../../profiles/agent.json')
   const patches: string[] = []
   let dumpOnly = false
+  let listModes = false
+  let mode: string | undefined
   let maxSteps: number | undefined
   const words: string[] = []
 
@@ -73,6 +78,13 @@ function parseArgs(argv: readonly string[]): CliArgs {
       const value = argv[index]
       if (value === undefined) throw new Error('--patch 后面要跟文件路径')
       patches.push(resolve(value))
+    } else if (token === '--mode') {
+      index += 1
+      const value = argv[index]
+      if (value === undefined) throw new Error('--mode 后面要跟模式 id（用 --list-modes 看有哪些）')
+      mode = value
+    } else if (token === '--list-modes') {
+      listModes = true
     } else if (token === '--max-steps') {
       index += 1
       const value = Number(argv[index])
@@ -88,11 +100,32 @@ function parseArgs(argv: readonly string[]): CliArgs {
   }
 
   const task = words.join(' ').trim()
-  if (!dumpOnly && task === '') {
-    throw new Error('缺少任务描述。用法：node src/apps/cli.ts "任务描述"')
+  if (!dumpOnly && !listModes && task === '') {
+    throw new Error('缺少任务描述。用法：node src/apps/cli.ts --mode ptc "任务描述"')
   }
 
-  return { task, profile, patches, dumpOnly, maxSteps }
+  return { task, profile, patches, dumpOnly, listModes, mode, maxSteps }
+}
+
+/**
+ * 打印可用模式表。
+ *
+ * 为什么要单独一个开关：模式是这个项目里"最该被看见"的东西 ——
+ * 它决定 agent 能用什么工具、被交代了什么。藏进 JSON 里等于没做。
+ */
+async function printModes(): Promise<void> {
+  const modes = await listModes()
+  console.log('\n可用的模式（modes/*.json）：\n')
+  for (const mode of modes) {
+    const tag = mode.builtin ? '内置  ' : '自定义'
+    console.log(`  ${mode.id.padEnd(14)} ${tag} ${mode.name}`)
+    console.log(`  ${''.padEnd(14)}        ${mode.description}`)
+    console.log(`  ${''.padEnd(14)}        工具：${mode.tools.join(', ')}`)
+    console.log(`  ${''.padEnd(14)}        步数上限：${mode.maxSteps ?? '(默认)'}　提示词：${mode.promptBytes} 字节\n`)
+  }
+  console.log('用法：node src/apps/cli.ts --mode <id> "任务"')
+  console.log('      node src/apps/repl.ts --mode <id>')
+  console.log('      node src/apps/web.ts  --mode <id> --open\n')
 }
 
 /** 打印事件流摘要 —— 只挑有信息量的事件，避免把 600 条日志刷屏。 */
@@ -123,10 +156,19 @@ function summarizeEvents(events: readonly SessionEvent[]): void {
 async function main(args: CliArgs): Promise<number> {
   let loaded: LoadedProfile | undefined
   try {
-    loaded = await loadProfile(args.profile, args.patches)
+    // ── 模式：先解析，再把它作为"装载前加工"的钩子交给装载器 ──
+    const mode = await resolveMode(args.mode)
+    console.log(`\n======== 模式 ========`)
+    console.log(`  ${mode.summary.id}　${mode.summary.name}`)
+    console.log(`  ${mode.summary.description}`)
+    console.log(`  工具：${mode.summary.tools.join(', ')}`)
+    console.log(`  步数上限：${mode.summary.maxSteps ?? '(默认)'}　提示词：${mode.summary.promptBytes} 字节`)
+
+    loaded = await loadProfile(args.profile, args.patches, { transformRows: mode.transformRows })
 
     console.log('\n======== 生效的配置 ========')
     loaded.dump()
+    console.log(`  （模式 ${mode.summary.id} 改动了：${Object.entries(mode.touched).map(([id, keys]) => `${id}[${keys.join('+')}]`).join(', ') || '(无)'}）`)
 
     if (args.dumpOnly) return 0
 
@@ -180,5 +222,10 @@ async function main(args: CliArgs): Promise<number> {
   }
 }
 
-const exitCode = await main(parseArgs(process.argv.slice(2)))
-process.exitCode = exitCode
+const args = parseArgs(process.argv.slice(2))
+
+if (args.listModes) {
+  await printModes()
+} else {
+  process.exitCode = await main(args)
+}

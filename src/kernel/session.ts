@@ -94,6 +94,14 @@ export interface SessionEventMap {
   }
   /** 工具执行的结果。**表面事件**。 */
   'tool/result': { toolCallId: string; name: string; content: string; isError: boolean }
+  /**
+   * 当前生效的系统提示词被设置或更换（模式系统新增）。
+   *
+   * 它**不是表面事件**（不直接产生消息），但 `deriveMessages()` 会读它 ——
+   * 所以它必须在日志里。否则提示词就成了"日志重建不出来"的隐状态，
+   * 而"模型当时看到什么"这个问题就会有一块答不上来。
+   */
+  'session/system-prompt': { text: string; mode?: string }
 }
 
 /** 全部事件类型名。 */
@@ -270,6 +278,19 @@ export class Session {
     this.append('tool/result', { toolCallId, name, content, isError })
   }
 
+  /**
+   * 设置当前生效的系统提示词。
+   *
+   * 与上次相同时**不写事件** —— 否则每次 `runTask` 都会往日志里塞一条一模一样的提示词。
+   * 只在"真的换了"（首次设置、或切换模式）时才留痕。
+   * @param text 提示词全文
+   * @param mode 它来自哪个模式（便于排查"这次用的是哪套"）
+   */
+  setSystemPrompt(text: string, mode?: string): void {
+    if (systemPromptOf(this.#events) === text) return
+    this.append('session/system-prompt', mode === undefined ? { text } : { text, mode })
+  }
+
   // ---------- 派生 ----------
 
   /** 从日志派生出发给模型的消息。 */
@@ -350,6 +371,12 @@ function readNumber(event: SessionEvent, key: string): number {
 export function deriveMessages(events: readonly SessionEvent[]): ChatMessage[] {
   const messages: ChatMessage[] = []
 
+  // ★ 系统提示词排在最前面，而且**也从日志里派生**（不另存一份状态）。
+  //   这样「Model-visible ⟺ logged」对提示词同样成立 ——
+  //   排查时可以问："模型当时看到的系统提示词是什么？"并真的答出来。
+  const systemPrompt = systemPromptOf(events)
+  if (systemPrompt !== '') messages.push({ role: 'system', content: systemPrompt })
+
   for (const event of events) {
     if (!SURFACE_EVENT_TYPES.has(event.type)) continue
 
@@ -395,6 +422,25 @@ export function deriveMessages(events: readonly SessionEvent[]): ChatMessage[] {
 /** 把 unknown 取成字符串（不是字符串就给空串）。 */
 function asText(value: unknown): string {
   return typeof value === 'string' ? value : ''
+}
+
+/**
+ * 从日志里取出当前生效的系统提示词。
+ *
+ * 取**最后**一条：模式可以切换（`/mode ptc`），切换时就再写一条事件 ——
+ * 于是"什么时候换了提示词、换成什么"是日志里查得到的事实，而不是内存里的隐状态。
+ * @param events 事件流
+ * @returns 提示词；从未设置过则返回空串
+ */
+export function systemPromptOf(events: readonly SessionEvent[]): string {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event === undefined || event.type !== 'session/system-prompt') continue
+    const data = event.data
+    if (typeof data !== 'object' || data === null) return ''
+    return asText((data as Record<string, unknown>)['text'])
+  }
+  return ''
 }
 
 // ============================================================

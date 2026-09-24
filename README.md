@@ -5,12 +5,14 @@
 ![Node](https://img.shields.io/badge/node-%E2%89%A522.18-3C873A?logo=node.js&logoColor=white)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strip--types-3178C6?logo=typescript&logoColor=white)
-![Acceptance](https://img.shields.io/badge/acceptance-20%2F20-success)
+![Acceptance](https://img.shields.io/badge/acceptance-23%2F23-success)
 ![Interface](https://img.shields.io/badge/interface-CLI%20%C2%B7%20REPL%20%C2%B7%20Web%20GUI-7c5cff)
+![Modes](https://img.shields.io/badge/modes-5%20presets-4f8cff)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 不需要 `npm install`，不需要编译，不需要构建工具 —— `node src/apps/cli.ts "任务"` 就能跑。
-想在终端里聊天就 `node src/apps/repl.ts`，想要图形界面就 `node src/apps/web.ts --open`。
+想在终端里聊天就 `node src/apps/repl.ts`，想要图形界面就 `node src/apps/web.ts --open`，
+想换一套能力装配就加 `--mode ptc`（或者界面上选、自己装一个）。
 
 ---
 
@@ -21,6 +23,7 @@
 - [核心特性](#核心特性)
 - [架构](#架构)
 - [三种界面](#三种界面)
+- [五种模式](#五种模式)
 - [目录结构](#目录结构)
 - [快速开始](#快速开始)
 - [用法](#用法)
@@ -57,16 +60,17 @@
 
 | 层 | 文件 | 行数 | 内容 |
 | --- | --- | --- | --- |
-| `kernel/` | 9 | 2748 | 纯能力：模型、工具、会话日志、循环、重试、守卫、检查点、离线规则 provider |
-| `framework/` | 4 | 981 | 插件容器、waterfall 事件、作用域隔离、配置层叠装载器 |
-| `plugins/` | 10 | 1340 | 把 kernel 的能力包成插件，并定义扩展点 |
+| `kernel/` | 13 | 3434 | 纯能力：模型、工具、日志、循环、重试、守卫、检查点、离线 provider、PTC 运行时、命令/程序/写作工具 |
+| `framework/` | 5 | 1231 | 插件容器、waterfall 事件、作用域隔离、配置层叠装载器、**模式（preset）声明** |
+| `plugins/` | 13 | 1796 | 把 kernel 的能力包成插件，并定义扩展点；含提示词、多智能体 |
 | `evolution/` | 9 | 1916 | 记忆、提醒、技能、用户建模、历史检索、诊断、演化门控、审计 |
-| `apps/` | 4 | 1138 | CLI、交互式对话框、Web GUI 服务端、一键验收 |
-| `demos/` | 16 | 2464 | 每一步的可运行演示 |
-| **合计** | **52** | **10587** | 零运行时依赖 |
+| `apps/` | 5 | 1534 | CLI、对话框、Web GUI 服务端、一键验收、模式解析 |
+| `demos/` | 17 | 2756 | 每一步的可运行演示 |
+| **合计** | **62** | **12667** | 零运行时依赖 |
 
-另有：前端单页 `src/apps/web-ui.html`（内嵌 CSS/JS，约 17 KB）、34 篇课程文档、
-22 个类型化事件（4 个框架级 + 18 个由插件用声明合并扩展）、8 个 profile、4 个 bundle、4 个 patch 示例。
+另有：前端单页 `src/apps/web-ui.html`（内嵌 CSS/JS）、**5 个模式声明**（`modes/*.json`）、
+**5 份模式提示词**（`prompts/*.md`）、34 篇课程文档、26 个类型化事件、
+8 个 profile、4 个 bundle、4 个 patch 示例。
 
 ## 与 DSH 的关系
 
@@ -101,6 +105,11 @@
 | 📊 **失败归因** | 把失败归因到组件，并给出 Macro-F1 / Cohen's κ / 95% bootstrap 置信区间 |
 | 🚦 **演化门控** | 自改提案必须通过回归基线；会让已通过任务退化的改动被拒绝并回滚 |
 | 🔗 **审计链** | 哈希链记录每次自改（改了什么 / 凭什么 / 结果如何），可验证、可复算 |
+| 💬 **三种界面** | 一条命令跑一个任务（CLI）、坐在终端聊天（REPL）、浏览器里的图形界面（Web GUI） |
+| 🖥 **零依赖 GUI** | `node:http` + SSE + 单页前端；没有 Electron、没有打包器、没有 `npm install` |
+| 🎛 **五种模式** | standard / ptc / minimal / creator / multi-agent —— 一份 JSON 声明换来一套装配 |
+| 🧩 **自由装配** | 界面里勾工具、拖步数、写提示词，存成自己的模式文件（与内置格式一致，可分享） |
+| 👥 **多智能体** | 主从派发：子 agent 各有独立会话与工具集，只有结论回到主上下文 |
 
 ## 架构
 
@@ -128,6 +137,84 @@ apps → plugins → framework
 1. **行为挂在扩展点上，不写死在调用链里。** 发现自己在循环里写 `if (config.retryEnabled)`，
    说明扩展点没留对。
 2. **依赖单向。** 底层不认识上层，能力不认识装配。
+
+## 五种模式
+
+**模式 = 一份声明**（`modes/*.json`）：这个 agent 能用哪些工具、被交代了什么提示词、限制多严。
+对照 DSH 的四个 preset，加一个本项目自己需要的多智能体模式：
+
+| 模式 | 工具 | 什么时候用 | 对照 DSH |
+| --- | --- | --- | --- |
+| **standard** 常规 | `read_file` `write_file` `list_dir` `delete_file` | 大多数任务 | Standard mode |
+| **ptc** | 上面几个 + `run_program` | 批量调工具后筛选、去重、统计、汇总 | PTC mode |
+| **minimal** 最小 | 只有 `run_command` | 测试与对比基础能力（对照组） | Minimal mode |
+| **creator** 创造 | `read_file` `list_dir` `write_skill` `write_plugin` `list_authoring` `run_command` | 让 agent 改造系统本身 | Creator mode |
+| **multi-agent** 多智能体 | 文件工具 + `spawn_agent` | 子任务过程长、结论短；或可并行的独立子任务 | （本项目新增） |
+
+```bash
+node src/apps/cli.ts --list-modes                      # 看全部模式与它们的工具
+node src/apps/cli.ts --mode ptc "统计 workspace 里所有 .md 文件的词频"
+node src/apps/repl.ts --mode creator                   # 对话框里直接用，可 /mode 切换
+node src/apps/web.ts --mode multi-agent --open         # 图形界面里选
+```
+
+### 模式只改装配，不改代码
+
+模式**不是**分支判断，是一份声明：
+
+```json
+{
+  "id": "ptc",
+  "name": "PTC 模式",
+  "description": "含常规模式全部能力，另加 run_program…",
+  "prompt": "ptc.md",
+  "tools": ["read_file", "write_file", "list_dir", "run_program"],
+  "disable": ["multi-agent"],
+  "llm": { "temperature": 0 },
+  "guard": { "rules": [...], "maxCalls": 12, "approve": [] },
+  "limits": { "maxSteps": 10 }
+}
+```
+
+装载时它被"编译"成一次 `transformRows` 加工 —— 复用第 6 步的层叠装载器，
+**没有为模式新增任何一条装载路径**：
+
+```
+profile（装哪些插件） + patch（覆盖配置） + mode（改哪些字段） → 最终装配 → 装载
+```
+
+界面上的 `--dump` 打印的就是模式生效之后的最终结果。
+
+### 自由装配（界面里装一个自己的模式）
+
+浏览器界面右上角「装配」→ 勾工具、拖步数、写提示词 → 存成 `modes/custom-<id>.json`：
+
+- 存下来的文件与内置模式**格式完全一致** —— 可以直接 `--mode custom-xxx` 启动、可以发给人、可以进版本库
+- 每个工具都标了风险等级（只读 / 可逆 / 不可逆），不可逆的会要求人工审批
+- 装配的落点是**文件**而不是浏览器里的状态：换个界面、换台机器，它还在
+
+### 多智能体：主从派发
+
+```
+主 agent ──spawn_agent──► 子 agent #1（独立会话 · 独立工具集 · 独立步数预算）
+        ──spawn_agent──► 子 agent #2
+        ◄──── 只有结论回到主 agent 的上下文 ────
+```
+
+一次可以派多个（`tasks: [...]`，并发跑）。**加这个能力没有改循环一行代码** ——
+它用的三样隔离东西全是既有机制：
+
+| 隔离项 | 靠什么 | 来自第几步 |
+| --- | --- | --- |
+| 独立会话（各写各的日志） | `session/factory` | 7 |
+| 独立工具集 | `subsetTools()` + 作用域 | 2、5 |
+| 独立循环与预算 | `new Agent({ maxSteps })` | 8 |
+
+看效果：
+
+```bash
+node src/demos/demo-modes.ts     # 五个模式各跑一次：PTC 写程序、最小模式跑 shell、派发子智能体、写技能 vs 写源码
+```
 
 ## 目录结构
 
@@ -165,17 +252,20 @@ dsh-mini/
 │   │   └── audit.ts               审计链（哈希链）
 │   ├── apps/
 │   │   ├── cli.ts                 一次一个任务：装载 → dump → 跑任务 → 报告
-│   │   ├── repl.ts                终端对话框：多轮对话 + / 命令
-│   │   ├── web.ts                 Web GUI 服务端：HTTP + SSE 事件流
-│   │   ├── web-ui.html            图形界面（单页，内嵌 CSS/JS）
-│   │   └── verify.ts              一键验收：16 个演示 + 4 个端到端检查
-│   └── demos/                     16 个演示，每一步一个
+│   │   ├── repl.ts                终端对话框：多轮对话 + / 命令（含 /mode 切换）
+│   │   ├── web.ts                 Web GUI 服务端：HTTP + SSE + 模式 API
+│   │   ├── web-ui.html            图形界面（单页，内嵌 CSS/JS，含装配面板）
+│   │   ├── shared-mode.ts         模式解析（三个界面共用）
+│   │   └── verify.ts              一键验收：17 个演示 + 6 个端到端检查
+│   └── demos/                     17 个演示，每一步一个
+├── modes/                         模式声明（5 个）：standard / ptc / minimal / creator / multi-agent
+├── prompts/                       模式提示词（与 modes/ 一一对应，可编辑）
 ├── bundles/                       core.json（能力层）/ evolution.json（进化层）
 ├── profiles/                      chat.json（对话）/ agent.json（离线）/ evolution.json 等
-├── patches/                       命令行覆盖示例（含放开审批、切真实模型）
+├── patches/                       命令行覆盖示例（放开审批、切真实模型）
 ├── skills/                        技能库落盘形式（.md）
-├── workspace/                     agent 的沙箱工作目录
-├── docs/                          34 篇课程与研究文档
+├── workspace/                     agent 的沙箱工作目录（PTC 程序落在 .ptc/ 下）
+├── docs/                          35 篇课程与研究文档
 ├── package.json                   scripts（npm 可用时可直接 `npm run verify` / `npm run chat`）
 └── tsconfig.json                  只为编辑器与 `tsc --noEmit` 准备，运行不需要
 ```
@@ -227,16 +317,22 @@ dsh-mini/
 git clone https://github.com/lancasterevaluation-collab/dsh-mini.git
 cd dsh-mini
 
-# 一键验收：16 个演示 + 4 个端到端检查
+# 一键验收：17 个演示 + 6 个端到端检查
 node src/apps/verify.ts
+
+# 看有哪些模式，各装了什么工具
+node src/apps/cli.ts --list-modes
 
 # 跑一个真实任务（离线 mock 模型，会真的读写 workspace/ 里的文件）
 node src/apps/cli.ts "看看这个目录里有什么，然后读一下 README"
 
-# 在终端里聊天（多轮）
+# 换个模式：PTC（模型可以写程序批量调工具）
+node src/apps/cli.ts --mode ptc "统计 workspace 里的文件"
+
+# 在终端里聊天（多轮、可 /mode 切换）
 node src/apps/repl.ts
 
-# 或者开一个图形界面
+# 或者开一个图形界面（右上角「装配」可以自己装一个模式）
 node src/apps/web.ts --open
 ```
 
@@ -437,14 +533,16 @@ node src/apps/verify.ts
 ✅ demo-agent.ts              135 ms
 ✅ demo-context.ts            119 ms
 ✅ demo-diagnose.ts           171 ms
-... （16 个演示，每一步一个）
-✅ cli --dump                 168 ms
-✅ cli 任务                   180 ms
-✅ repl 对话框                147 ms
-✅ web GUI                    301 ms（首页 16656 字节，provider=local）
+... （17 个演示，每一步一个）
+✅ cli --dump                 208 ms
+✅ cli 任务                   237 ms
+✅ repl 对话框                240 ms
+✅ web GUI                    311 ms（首页 28524 字节，provider=local）
+✅ 模式列表                   135 ms
+✅ 模式改造装配               186 ms
 
 ======== 汇总 ========
-  20/20 项通过
+  23/23 项通过
 ```
 
 每一项都**带期望输出**：只检查退出码会让"什么都没跑"也算通过，
@@ -456,6 +554,8 @@ node src/apps/verify.ts
 | --- | --- | --- |
 | `repl 对话框` | 交互式程序**只能人工敲**才验证得到 | 把输入写进子进程 stdin —— 与真人敲键走同一条代码路径（这也是 `repl.ts` 用 `line` 事件而不是 `question()` 的原因） |
 | `web GUI` | 只检查"HTML 文件存在"的话，`web.ts` 崩了照样通过 | 真的起服务 → 轮询等就绪 → 请求首页与状态接口 → 关掉 |
+| `模式列表` | 只看命令能跑通的话，少了一个模式也发现不了 | 五个模式的 id 必须都出现在输出里 |
+| `模式改造装配` | "模式加载了"和"模式真的改变了装配"是两回事 | dump 里必须看到 `"builtin":["run_command"]`、且**不再有**原来的工具列表 |
 
 ## 关键设计决策
 
@@ -583,6 +683,18 @@ rm -rf workspace/.sessions workspace/.checkpoints workspace/guard-demo
 所以**所有演示与验收都跑在离线 provider 上**（`MockProvider` 或规则式的 `LocalProvider`）——
 这一点没有含糊：仓库里没有任何"假装调用过真实模型"的输出。
 
+**Q：怎么加一个新模式？**
+
+两条路：
+
+1. **界面里装**：打开 Web GUI → 右上角「装配」→ 选一个起点、勾工具、拖步数、写提示词 → 保存。
+   它会写 `modes/custom-<id>.json` 与 `prompts/custom-<id>.md`，然后立刻生效。
+2. **手写**：复制一个 `modes/*.json` 改字段，再写一份 `prompts/<你的>.md`。
+   格式见上文[五种模式](#五种模式)，字段校验在 `framework/modes.ts` 的 `parseModeDecl`。
+
+两条路产出的**是同一种东西** —— 所以界面里装出来的模式可以直接 `--mode custom-xxx` 用来跑 CLI，
+也能发给别人。想让 agent 自己造模式和组件，用 `--mode creator`（写技能不需要审批，写源码要）。
+
 **Q：界面能改吗？加一个展示要动 agent 吗？**
 
 不用动 agent。三个界面消费的都是同一个 `session/event` 事件流：
@@ -592,6 +704,7 @@ rm -rf workspace/.sessions workspace/.checkpoints workspace/guard-demo
 | 界面展示（颜色、布局、卡片、动效） | `src/apps/web-ui.html`（纯前端，改完刷新即可） |
 | 界面能看到的**新信息** | 前端多读一个事件字段；字段不存在就先在对应插件里补一条事件 |
 | 一个新的界面（比如 TUI） | 新写一个 `apps/*.ts`，装载 profile + 消费事件 —— 参考 `repl.ts` 的 200 行骨架 |
+| 一个新的**模式** | 写 `modes/*.json` + `prompts/*.md`（或界面里装配），三个界面立刻都能用 |
 
 **Q：为什么不做成常驻服务 / 桌面应用？**
 
@@ -606,7 +719,8 @@ Web GUI **是**常驻的（`web.ts` 会一直跑，直到 Ctrl+C），但它只�
 
 ## 项目状态与局限
 
-**已完成**：16 步全部实现，三种界面（CLI / 对话框 / Web GUI）可用，验收 20/20 通过。
+**已完成**：16 步全部实现；三种界面（CLI / 对话框 / Web GUI）与五种模式（含多智能体）可用；
+验收 23/23 通过。
 
 **没有做的，以及为什么**：
 
@@ -621,14 +735,16 @@ Web GUI **是**常驻的（`web.ts` 会一直跑，直到 Ctrl+C），但它只�
 
 **已知的真实缺陷**（每个模块的文件头与 `docs/` 的 L4 章节都列了，这里挑几个）
 
-- `kernel/agent.ts` 的工具调用是**串行**的，没有并行工具池。
+- `kernel/agent.ts` 的工具调用是**串行**的，没有并行工具池（多智能体靠 `spawn_agent` 内部分批绕过这一点）。
+- **模式切换要重新装载**：工具集与提示词都在装载期确定，所以 `/mode`、界面上的切换都会走一遍装载。能做对，但切换有成本（重新建会话）。
+- **PTC 与 minimal 没有沙箱**：`run_program` 与 `run_command` 都以当前用户权限运行，只有调用次数、时限、输出长度三道限流。只应在信任模型的场景下开。
+- **子智能体不继承守卫链**：它有自己的工具集，但父 agent 那条守卫策略不会自动传下去。
 - `LocalProvider` 的意图匹配是**关键词规则**：问法一变就落回兜底回答，也不理解代词。
 - 三个界面**都没有流式输出**：回答是整段出现的（`Provider` 接口是单次返回，改成流式要动第 1 步）。
 - 对话框的上下文**只增不减**：聊久了每次请求都带着全部历史，`/new` 是当前唯一对策。
-- 用户建模的信号提取也是正则：会漏掉同义表达（"简洁"匹配不到"简短"那条规则）。
-- `diagnose.ts` 的规则只看"有没有"、不看"多少"：一次工具失败和十次归因相同。
-- 审计链只在内存里，进程退出即丢（`AuditLog.toJSON()` 已经可用，接落盘即可）。
-- 演化门控的回归用例是 3 条内置探针，覆盖太窄，发现不了大部分退化。
+- 模式声明里的 `skills` 字段目前**没有被消费**（技能子集还没接到运行期）。
+- 用户建模的信号提取也是正则，`diagnose.ts` 的规则只看"有没有"不看"多少"。
+- 审计链只在内存里，进程退出即丢；演化门控的回归用例是 3 条内置探针，覆盖太窄。
 
 ## 开发约定
 

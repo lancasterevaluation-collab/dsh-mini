@@ -1,0 +1,17 @@
+{
+  "id": "ptc",
+  "name": "PTC 模式",
+  "description": "含常规模式全部能力，另加 run_program：模型可以写一段程序批量调工具，只把打印输出与返回值带回上下文。适合「批量调用后筛选、去重、统计、汇总」的任务。",
+  "builtin": true,
+  "prompt": "ptc.md",
+  "tools": ["read_file", "write_file", "list_dir", "run_program"],
+  "skills": [],
+  "disable": ["multi-agent"],
+  "llm": { "temperature": 0 },
+  "guard": {
+    "rules": ["loop", "irreversible", "quota", "path"],
+    "maxCalls": 12,
+    "approve": []
+  },
+  "limits": { "maxSteps": 10 }
+}

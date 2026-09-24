@@ -1,0 +1,17 @@
+{
+  "id": "creator",
+  "name": "创造模式",
+  "description": "通过与对话改造系统本身：让 agent 写技能、写插件，或组合出新的模式。写技能不需要审批，写 src/ 下的源码属不可逆操作、需要人工审批。",
+  "builtin": true,
+  "prompt": "creator.md",
+  "tools": ["read_file", "list_dir", "write_skill", "write_plugin", "list_authoring", "run_command"],
+  "skills": [],
+  "disable": ["multi-agent"],
+  "llm": { "temperature": 0 },
+  "guard": {
+    "rules": ["loop", "irreversible", "quota", "path"],
+    "maxCalls": 14,
+    "approve": []
+  },
+  "limits": { "maxSteps": 12 }
+}

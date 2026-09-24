@@ -1,0 +1,17 @@
+{
+  "id": "minimal",
+  "name": "最小模式",
+  "description": "只给一个终端工具 run_command。用来测试与对比基础能力 —— 同一个模型在「结构化工具」与「只有一个 shell」下差多少。",
+  "builtin": true,
+  "prompt": "minimal.md",
+  "tools": ["run_command"],
+  "skills": [],
+  "disable": ["multi-agent"],
+  "llm": { "temperature": 0 },
+  "guard": {
+    "rules": ["loop", "quota"],
+    "maxCalls": 10,
+    "approve": []
+  },
+  "limits": { "maxSteps": 8 }
+}

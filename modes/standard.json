@@ -1,0 +1,13 @@
+{
+  "id": "standard",
+  "name": "常规模式",
+  "description": "用代码、文件、信息工作，适合大多数任务。有四个结构化的文件工具。",
+  "builtin": true,
+  "prompt": "standard.md",
+  "tools": ["read_file", "write_file", "list_dir", "delete_file"],
+  "skills": [],
+  "disable": ["multi-agent"],
+  "llm": { "temperature": 0 },
+  "guard": { "rules": ["loop", "irreversible", "quota", "path"], "approve": [] },
+  "limits": { "maxSteps": 8 }
+}

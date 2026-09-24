@@ -195,6 +195,18 @@ export interface LoadedProfile {
 export interface LoadProfileOptions {
   /** 复用一个已有的根容器（不给就新建）。 */
   readonly root?: Context
+  /**
+   * 在装载之前加工最终的行列表（模式系统新增）。
+   *
+   * ★ 为什么需要这个钩子，而不是再叠一层 patch？★
+   * 因为 `patch` 的语义是**整段替换 config** —— 而模式只想调其中几个字段
+   * （工具列表、步数上限、温度），并不想重写 `workspace` 这类别人的设置。
+   * 把 patch 改成深合并会破坏"整段替换"这条已被文档化的规则，
+   * 所以改成显式的一步：**拿到合并结果 → 加工 → 装载**。
+   *
+   * 加工结果就是最终生效的行 —— 所以 `dump()` 打印的正是模式生效之后的样子。
+   */
+  readonly transformRows?: (rows: readonly PluginRow[]) => readonly PluginRow[]
 }
 
 /**
@@ -229,7 +241,9 @@ export async function loadProfile(
   }
 
   // ③ 层叠成最终配置
-  const rows = composeRows(bundles, layers)
+  const composed = composeRows(bundles, layers)
+  // ③.5 加工（模式系统在这里把声明合进各行的 config）
+  const rows = options.transformRows === undefined ? composed : [...options.transformRows(composed)]
 
   // ④ 逐行装载
   const ctx = options.root ?? new Context(profile.name)

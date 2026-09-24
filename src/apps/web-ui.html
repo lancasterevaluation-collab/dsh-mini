@@ -214,17 +214,113 @@
     border: 1px solid var(--line); background: var(--bg-soft); color: var(--text-dim);
   }
 
+  /* ---- 模式选择器 ---- */
+  select.select {
+    font: inherit; font-size: 13px;
+    color: var(--text); background: var(--panel);
+    border: 1px solid #3a2f6b; border-radius: var(--radius-sm);
+    padding: 5px 10px; cursor: pointer; max-width: 210px;
+  }
+  select.select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,92,255,.14); }
+  select.select option { background: #171b25; color: var(--text); }
+
+  /* ---- 装配面板 ---- */
+  .sheet-backdrop {
+    position: fixed; inset: 0; background: rgba(4, 6, 11, .68);
+    backdrop-filter: blur(3px); display: none; z-index: 40;
+  }
+  .sheet-backdrop.open { display: block; }
+
+  .sheet {
+    position: fixed; z-index: 41; right: 0; top: 0; bottom: 0;
+    width: min(560px, 94vw);
+    background: var(--bg-soft); border-left: 1px solid var(--line);
+    box-shadow: -24px 0 60px -20px rgba(0,0,0,.7);
+    transform: translateX(100%); transition: transform .24s ease;
+    display: flex; flex-direction: column;
+  }
+  .sheet.open { transform: translateX(0); }
+
+  .sheet-head {
+    padding: 16px 20px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .sheet-head h2 { margin: 0; font-size: 16px; font-weight: 650; }
+  .sheet-body { flex: 1; overflow-y: auto; padding: 18px 20px; }
+  .sheet-foot {
+    padding: 14px 20px; border-top: 1px solid var(--line);
+    display: flex; gap: 10px; align-items: center;
+  }
+
+  .field { margin-bottom: 18px; }
+  .field > label { display: block; font-size: 12.5px; color: var(--text-dim); margin-bottom: 7px; font-weight: 600; }
+  .field .hintline { font-size: 11.5px; color: var(--text-faint); margin-top: 5px; }
+
+  input.text, textarea.text {
+    width: 100%; font: inherit; font-size: 13px;
+    color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    padding: 8px 11px; outline: none;
+  }
+  input.text:focus, textarea.text:focus { border-color: #3d3a6b; box-shadow: 0 0 0 3px rgba(124,92,255,.12); }
+  textarea.text { resize: vertical; min-height: 120px; line-height: 1.55; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+  .toolgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .toolopt {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--text-dim);
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius-sm); padding: 8px 11px; cursor: pointer;
+    transition: .14s;
+  }
+  .toolopt:hover { border-color: #3d4661; color: var(--text); }
+  .toolopt input { accent-color: var(--accent); }
+  .toolopt.danger { border-color: #4a2d33; }
+  .toolopt.danger input { accent-color: var(--err); }
+  .toolopt .se { margin-left: auto; font-size: 10.5px; color: var(--text-faint); }
+
+  button.primary {
+    font: inherit; font-weight: 600; color: #fff; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border: none; border-radius: var(--radius-sm); padding: 9px 18px;
+  }
+  button.primary:disabled { opacity: .45; cursor: not-allowed; }
+
+  .modecard {
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    padding: 11px 13px; margin-bottom: 9px; cursor: pointer; transition: .14s;
+    background: var(--panel);
+  }
+  .modecard:hover { border-color: #3d4661; }
+  .modecard.active { border-color: var(--accent); background: #1b1735; }
+  .modecard .t { font-weight: 650; font-size: 13.5px; }
+  .modecard .d { font-size: 12px; color: var(--text-faint); margin-top: 4px; line-height: 1.5; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(10px);
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 999px; padding: 9px 18px; font-size: 13px;
+    opacity: 0; transition: .2s; pointer-events: none; z-index: 60;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.err { border-color: #5a2d33; color: #ffc9c9; }
+
   @media (max-width: 620px) {
     .bubble, .proc, .notice { max-width: 94%; }
     .stats { display: none; }
+    .toolgrid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
   <header>
     <div class="brand"><span class="dot"></span> dsh-mini</div>
+    <select id="select-mode" class="select" title="当前模式">
+      <option>载入中…</option>
+    </select>
     <span class="badge" id="badge-provider">连接中…</span>
-    <span class="badge" id="badge-workspace">—</span>
+    <span class="badge" id="badge-workspace" title="工作目录">—</span>
     <div class="spacer"></div>
     <div class="stats">
       <span>轮次 <b id="stat-turns">0</b></span>
@@ -232,6 +328,7 @@
       <span>工具 <b id="stat-tools">0</b></span>
       <span>守卫 <b id="stat-guard">0</b></span>
     </div>
+    <button class="ghost" id="btn-assemble">装配</button>
     <button class="ghost" id="btn-reset">新会话</button>
   </header>
 
@@ -249,11 +346,55 @@
     </div>
   </footer>
 
+  <!-- 装配面板：勾选组件 → 存成一个自定义模式 -->
+  <div class="sheet-backdrop" id="sheet-backdrop"></div>
+  <aside class="sheet" id="sheet">
+    <div class="sheet-head">
+      <h2>装配模式</h2>
+      <div class="spacer"></div>
+      <button class="ghost" id="btn-close-sheet">关闭</button>
+    </div>
+    <div class="sheet-body">
+      <div class="field">
+        <label>以哪个模式为起点</label>
+        <div id="mode-cards"></div>
+        <div class="hintline">选一个之后，下面的工具与步数会换成它的；改完存成自己的模式</div>
+      </div>
+      <div class="field">
+        <label>工具</label>
+        <div class="toolgrid" id="tool-grid"></div>
+        <div class="hintline">红框是不可逆操作（会要求人工审批）；spawn_agent 需要 multi-agent 插件</div>
+      </div>
+      <div class="field">
+        <label>步数上限：<b id="steps-label">8</b></label>
+        <input type="range" id="steps-range" min="1" max="24" value="8" />
+      </div>
+      <div class="field">
+        <label>系统提示词</label>
+        <textarea class="text" id="prompt-text" placeholder="给这个模式交代清楚它的职责与边界"></textarea>
+        <div class="hintline">每轮都会进入模型上下文，尽量短</div>
+      </div>
+      <div class="field">
+        <label>保存为自定义模式</label>
+        <input class="text" id="custom-id" placeholder="id（小写字母、数字、连字符）" />
+        <input class="text" id="custom-name" placeholder="显示名" style="margin-top:8px" />
+        <input class="text" id="custom-desc" placeholder="一句话说明" style="margin-top:8px" />
+        <div class="hintline">落盘到 modes/custom-&lt;id&gt;.json 与 prompts/custom-&lt;id&gt;.md —— 可以发给别人</div>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="primary" id="btn-save-mode">保存并启用</button>
+      <span class="hintline" id="save-hint"></span>
+    </div>
+  </aside>
+
+  <div class="toast" id="toast"></div>
+
 <script>
 // ============================================================
 // 状态
 // ============================================================
-const state = { running: false, provider: '?', hasMessages: false }
+const state = { running: false, provider: '?', mode: 'standard', hasMessages: false }
 
 const els = {
   wrap: document.getElementById('wrap'),
@@ -366,6 +507,9 @@ function hideThinking() {
 /** 更新顶栏统计。 */
 function applyState(s) {
   state.provider = s.provider
+  state.mode = s.mode
+  const select = document.getElementById('select-mode')
+  if (select !== null && typeof s.mode === 'string' && s.mode !== '') select.value = s.mode
   els.provider.textContent = s.provider === 'local' ? '离线规则' : s.provider === 'mock' ? 'mock 脚本' : s.model
   els.provider.className = 'badge' + (s.provider === 'local' ? ' warn' : s.provider === 'deepseek' ? ' accent' : '')
   els.workspace.textContent = s.workspace
@@ -511,6 +655,183 @@ els.reset.addEventListener('click', async () => {
 renderHero()
 connect()
 els.input.focus()
+
+// ============================================================
+// 模式与装配
+//
+// ★ 装配的落点是**文件**（modes/*.json），不是浏览器里的状态 ★
+// 所以"保存"这个动作是往磁盘写一份新模式 —— 于是用户装出来的东西
+// 和内置模式格式完全一致，可以用来启动 CLI、可以发给人、可以进版本库。
+// ============================================================
+
+const modeSelect = document.getElementById('select-mode')
+const sheetEl = document.getElementById('sheet')
+const backdropEl = document.getElementById('sheet-backdrop')
+const toolGrid = document.getElementById('tool-grid')
+const modeCards = document.getElementById('mode-cards')
+const stepsRange = document.getElementById('steps-range')
+const stepsLabel = document.getElementById('steps-label')
+const promptArea = document.getElementById('prompt-text')
+const toastEl = document.getElementById('toast')
+
+let modesCache = []
+let toolsCache = []
+let draftFrom = 'standard'
+
+/** 一条轻提示。 */
+function toast(message, isError) {
+  toastEl.textContent = message
+  toastEl.className = 'toast show' + (isError ? ' err' : '')
+  setTimeout(() => { toastEl.className = 'toast' }, 2800)
+}
+
+/** 拉模式列表，填充顶栏下拉与面板卡片。 */
+async function refreshModes() {
+  try {
+    modesCache = await (await fetch('/api/modes')).json()
+  } catch {
+    return
+  }
+
+  modeSelect.replaceChildren(...modesCache.map((mode) => {
+    const option = document.createElement('option')
+    option.value = mode.id
+    option.textContent = mode.name
+    option.title = mode.description
+    return option
+  }))
+  modeSelect.value = state.mode
+
+  modeCards.replaceChildren(...modesCache.map((mode) => {
+    const card = el('div', 'modecard' + (mode.id === draftFrom ? ' active' : ''))
+    card.appendChild(el('div', 't', mode.name))
+    card.appendChild(el('div', 'd', mode.description))
+    card.addEventListener('click', () => { draftFrom = mode.id; fillDraft(); refreshModes() })
+    return card
+  }))
+
+  if (toolsCache.length === 0) {
+    try { toolsCache = await (await fetch('/api/tools')).json() } catch { toolsCache = [] }
+  }
+}
+
+/** 按"起点模式"填充面板其它字段。 */
+function fillDraft() {
+  const mode = modesCache.find((item) => item.id === draftFrom)
+  if (mode === undefined) return
+
+  toolGrid.replaceChildren(...toolsCache.map((tool) => {
+    const label = el('label', 'toolopt' + (tool.sideEffect === 'irreversible' ? ' danger' : ''))
+    const box = document.createElement('input')
+    box.type = 'checkbox'
+    box.value = tool.name
+    box.checked = mode.tools.includes(tool.name)
+    box.dataset.tool = tool.name
+    label.appendChild(box)
+    label.appendChild(el('span', null, tool.name))
+    label.appendChild(el('span', 'se', tool.sideEffect === 'irreversible' ? '不可逆' : tool.sideEffect === 'none' ? '只读' : '可逆'))
+    label.title = tool.summary
+    return label
+  }))
+
+  stepsRange.value = String(mode.maxSteps ?? 8)
+  stepsLabel.textContent = stepsRange.value
+  promptArea.value = mode.promptText ?? ''
+
+  document.getElementById('custom-id').value = ''
+  document.getElementById('custom-name').value = `${mode.name}（自定义）`
+  document.getElementById('custom-desc').value = `基于 ${mode.name} 的自定义装配`
+  document.getElementById('save-hint').textContent = `起点：${mode.id}`
+}
+
+/** 打开/关闭面板。 */
+function openSheet() {
+  backdropEl.classList.add('open')
+  sheetEl.classList.add('open')
+  void refreshModes().then(fillDraft)
+}
+function closeSheet() {
+  backdropEl.classList.remove('open')
+  sheetEl.classList.remove('open')
+}
+
+/** 切换模式。 */
+async function switchMode(id) {
+  try {
+    const response = await fetch('/api/mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      toast('切换失败：' + (payload.error || response.status), true)
+      await refreshModes()
+      return
+    }
+    applyState(payload)
+    els.wrap.replaceChildren()
+    state.hasMessages = false
+    renderHero()
+    toast(`已切到「${payload.modeName}」，工具：${payload.modeTools.join(', ')}`)
+  } catch (error) {
+    toast('切换失败：' + error.message, true)
+  }
+}
+
+/** 保存自定义模式并启用。 */
+async function saveCustomMode() {
+  const tools = [...toolGrid.querySelectorAll('input[type="checkbox"]')]
+    .filter((box) => box.checked)
+    .map((box) => box.value)
+
+  if (tools.length === 0) {
+    toast('至少要勾一个工具', true)
+    return
+  }
+
+  const button = document.getElementById('btn-save-mode')
+  button.disabled = true
+  try {
+    const response = await fetch('/api/custom-mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: document.getElementById('custom-id').value,
+        name: document.getElementById('custom-name').value,
+        description: document.getElementById('custom-desc').value,
+        tools,
+        maxSteps: Number(stepsRange.value),
+        promptText: promptArea.value,
+      }),
+    })
+    const payload = await response.json()
+    if (!response.ok) {
+      toast('保存失败：' + (payload.error || response.status), true)
+      return
+    }
+    applyState(payload.state)
+    await refreshModes()
+    closeSheet()
+    els.wrap.replaceChildren()
+    state.hasMessages = false
+    renderHero()
+    toast(`已保存并启用模式 ${payload.id}`)
+  } catch (error) {
+    toast('保存失败：' + error.message, true)
+  } finally {
+    button.disabled = false
+  }
+}
+
+modeSelect.addEventListener('change', () => { void switchMode(modeSelect.value) })
+document.getElementById('btn-assemble').addEventListener('click', openSheet)
+document.getElementById('btn-close-sheet').addEventListener('click', closeSheet)
+backdropEl.addEventListener('click', closeSheet)
+stepsRange.addEventListener('input', () => { stepsLabel.textContent = stepsRange.value })
+document.getElementById('btn-save-mode').addEventListener('click', () => { void saveCustomMode() })
+
+void refreshModes()
 </script>
 </body>
 </html>

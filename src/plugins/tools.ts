@@ -25,6 +25,9 @@ import { resolve } from 'node:path'
 import { builtinTools } from '../kernel/builtin-tools.ts'
 import { ToolRegistry } from '../kernel/tools.ts'
 import type { Tool } from '../kernel/tools.ts'
+import { authoringTools } from '../kernel/authoring-tools.ts'
+import { runCommandTool } from '../kernel/command-tool.ts'
+import { createProgramTool } from '../kernel/program-tool.ts'
 import type { Plugin } from '../framework/context.ts'
 
 declare module '../framework/events.ts' {
@@ -34,14 +37,67 @@ declare module '../framework/events.ts' {
   }
 }
 
+// ============================================================
+// 工具池：这个 harness 一共能提供哪些工具
+//
+// ★ 为什么分成"普通工具"与"工厂工具"两类 ★
+// 大多数工具不依赖任何东西（给它参数它就能干活）。但 `run_program` 不一样：
+// 它必须知道"程序里能调用哪些工具"，也就是需要拿到**工具注册表本身**。
+// 把它写成工厂（构造时注入注册表），比让它去 import 一个全局注册表干净得多 ——
+// 后者会让"用哪个注册表"变成隐式的全局状态，多智能体场景下直接出错。
+// ============================================================
+
+/** 不依赖外部东西的工具。 */
+const PLAIN_TOOLS: readonly Tool[] = [...builtinTools, runCommandTool, ...authoringTools]
+
+/** 需要拿到工具注册表才能造出来的工具。 */
+const TOOL_FACTORIES: Readonly<Record<string, (registry: ToolRegistry) => Tool>> = {
+  run_program: (registry) => createProgramTool(registry),
+}
+
+/** 可以写进 `builtin` 的全部工具名。 */
+export const TOOL_POOL_NAMES: readonly string[] = [
+  ...PLAIN_TOOLS.map((tool) => tool.name),
+  ...Object.keys(TOOL_FACTORIES),
+]
+
+/**
+ * 工具清单：给"装配面板"用的可选项列表。
+ *
+ * 界面要让人勾选"这个模式能用哪些工具"，所以它需要知道**全量**工具与各自的风险等级。
+ * 这份清单必须与实际可装载的工具保持同步 —— 所以它是从工具池**算出来的**，
+ * 而不是另写一份常量（那份迟早会漂移）。
+ */
+export const TOOL_CATALOG: readonly {
+  readonly name: string
+  readonly sideEffect: string
+  readonly summary: string
+}[] = [
+  ...PLAIN_TOOLS.map((tool) => ({
+    name: tool.name,
+    sideEffect: tool.sideEffect,
+    summary: tool.description.split('\n')[0] ?? '',
+  })),
+  {
+    name: 'run_program',
+    sideEffect: 'reversible',
+    summary: '写一段程序在新进程里跑，程序里可以批量调用其它工具；中间结果不进上下文',
+  },
+  {
+    name: 'spawn_agent',
+    sideEffect: 'none',
+    summary: '派发子智能体（由 multi-agent 插件提供，启用该插件后才有）',
+  },
+]
+
 /** 配置文件里这一段能写什么。 */
 export interface ToolsConfig {
   /** 工具的工作目录（安全边界）。默认取进程工作目录。 */
   readonly workspace?: string
   /**
-   * 要装载的内置工具名。
-   * 不给 = 只装只读工具（`read_file` / `list_dir`）；
-   * 写 `"all"` = 全部（**含不可逆的 `delete_file`**）。
+   * 要装载的工具名。**模式系统（`modes/*.json`）会覆盖这个字段**，
+   * 所以它通常由模式决定，而不是手写在这里。
+   * 不给 = 只装只读工具（`read_file` / `list_dir`）。
    */
   readonly builtin?: readonly string[] | string
 }
@@ -63,7 +119,7 @@ export const DEFAULT_BUILTIN_TOOLS: readonly string[] = ['read_file', 'list_dir'
  */
 export function resolveToolsSpec(config: ToolsConfig | undefined): ToolsSpec {
   const raw = config ?? {}
-  const available = builtinTools.map((tool) => tool.name)
+  const available = TOOL_POOL_NAMES
 
   let names: readonly string[]
   if (raw.builtin === undefined) names = DEFAULT_BUILTIN_TOOLS
@@ -92,7 +148,8 @@ export const toolsPlugin: Plugin = {
     const registry = new ToolRegistry()
 
     for (const name of spec.builtin) {
-      const tool = builtinTools.find((candidate) => candidate.name === name)
+      const plain = PLAIN_TOOLS.find((candidate) => candidate.name === name)
+      const tool = plain ?? TOOL_FACTORIES[name]?.(registry)
       if (tool === undefined) continue // resolveToolsSpec 已经挡过，这里只是收窄类型
       registry.register(tool)
       void ctx.emit('tools/registered', { name, sideEffect: tool.sideEffect, by: ctx.name })

@@ -52,9 +52,23 @@
       }
     },
     {
+      "id": "prompt",
+      "plugin": "../src/plugins/prompt.ts",
+      "config": {
+        "text": "你是 dsh-mini 的助手。",
+        "mode": "default"
+      }
+    },
+    {
       "id": "agent-loop",
       "plugin": "../src/plugins/agent-loop.ts",
       "config": { "maxSteps": 8, "checkpoints": true }
+    },
+    {
+      "id": "multi-agent",
+      "plugin": "../src/plugins/multi-agent.ts",
+      "disabled": true,
+      "config": { "defaultMaxSteps": 8, "maxConcurrent": 4, "inheritPrompt": true, "exposeTool": true }
     }
   ]
 }
