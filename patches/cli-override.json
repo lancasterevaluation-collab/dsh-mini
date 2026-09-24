@@ -1,0 +1,21 @@
+{
+  "patch": [
+    {
+      "id": "config",
+      "config": { "model": "overridden-by-cli" }
+    },
+    {
+      "id": "legacy-extra",
+      "disabled": false
+    },
+    {
+      "insert": [
+        {
+          "id": "extra-plugin",
+          "plugin": "../src/plugins/demo-named-service.ts",
+          "config": { "serviceName": "extra", "value": "（新插入的插件）" }
+        }
+      ]
+    }
+  ]
+}

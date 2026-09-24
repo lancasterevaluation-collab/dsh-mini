@@ -1,0 +1,4 @@
+{
+  "name": "base-only",
+  "bundles": ["../bundles/base.json"]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "dev",
+  "bundles": ["../bundles/base.json"],
+  "patch": [
+    {
+      "id": "config",
+      "config": { "workspace": "D:/lab-dev", "model": "deepseek-chat" }
+    },
+    {
+      "id": "greeter",
+      "config": { "prefix": "【开发模式】" }
+    }
+  ]
+}

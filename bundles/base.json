@@ -1,0 +1,21 @@
+{
+  "id": "base",
+  "rows": [
+    {
+      "id": "config",
+      "plugin": "../src/plugins/demo-config.ts",
+      "config": { "workspace": "D:/agent-harness-lab", "model": "mock" }
+    },
+    {
+      "id": "greeter",
+      "plugin": "../src/plugins/demo-greeter.ts",
+      "config": { "prefix": "你好" }
+    },
+    {
+      "id": "legacy-extra",
+      "plugin": "../src/plugins/demo-named-service.ts",
+      "disabled": true,
+      "config": { "serviceName": "legacy", "value": "（备用插件）" }
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "name": "dsh-mini",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "零依赖 TypeScript 实现的 DSH 级插件化 agent harness，含 Hermes 式学习进化闭环",
+  "keywords": [
+    "agent",
+    "harness",
+    "llm",
+    "plugin",
+    "cordis",
+    "typescript",
+    "zero-dependency"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "verify": "node src/apps/verify.ts",
+    "cli": "node src/apps/cli.ts",
+    "dump": "node src/apps/cli.ts --profile profiles/evolution.json --dump ready",
+    "demo:llm": "node src/demos/demo-llm.ts",
+    "demo:tools": "node src/demos/demo-tools.ts",
+    "demo:context": "node src/demos/demo-context.ts",
+    "demo:events": "node src/demos/demo-events.ts",
+    "demo:scope": "node src/demos/demo-scope.ts",
+    "demo:loader": "node src/demos/demo-loader.ts",
+    "demo:session": "node src/demos/demo-session.ts",
+    "demo:agent": "node src/demos/demo-agent.ts",
+    "demo:retry": "node src/demos/demo-retry.ts",
+    "demo:guard": "node src/demos/demo-guard.ts",
+    "demo:memory": "node src/demos/demo-memory.ts",
+    "demo:skills": "node src/demos/demo-skills.ts",
+    "demo:recall": "node src/demos/demo-recall.ts",
+    "demo:diagnose": "node src/demos/demo-diagnose.ts",
+    "demo:evolve": "node src/demos/demo-evolve.ts",
+    "demo:loop": "node src/demos/demo-evolution-loop.ts"
+  }
+}

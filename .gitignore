@@ -1,0 +1,15 @@
+# 运行产物：会话日志、检查点、临时目录
+tmp/
+workspace/.sessions/
+workspace/.checkpoints/
+workspace/guard-demo/
+
+# 编辑器与系统
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# 依赖（本项目零依赖，这条只是防止误提交）
+node_modules/

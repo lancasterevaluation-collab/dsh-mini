@@ -1,0 +1,4 @@
+{
+  "name": "reversed",
+  "bundles": ["../bundles/reversed.json"]
+}

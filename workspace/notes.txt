@@ -1,0 +1,5 @@
+一些随便写的笔记，用途是让 list_dir 有多条结果可看。
+
+- CLI 演示的第一步是 list_dir，第二步是 read_file workspace/README.md
+- 守卫的配额守卫（quotaGuard）默认 maxCalls=8，一次任务里调用超过 8 次工具就会被拦
+- 循环守卫（loopGuard）默认阈值 3，连续 3 次相同调用会被拦

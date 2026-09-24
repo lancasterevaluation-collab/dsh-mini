@@ -1,0 +1,24 @@
+{
+  "name": "evolution",
+  "bundles": ["../bundles/core.json", "../bundles/evolution.json"],
+  "patch": [
+    {
+      "id": "llm",
+      "config": {
+        "provider": "mock",
+        "model": "mock-offline",
+        "script": [
+          {
+            "toolCalls": [
+              { "name": "delete_file", "arguments": { "path": "important.txt" } },
+              { "name": "delete_file", "arguments": { "path": "important.txt" } }
+            ]
+          },
+          { "content": "两次操作都被守卫拒绝了，我不删了。" },
+          { "toolCalls": [{ "name": "read_file", "arguments": { "path": "README.md" } }] },
+          { "content": "读完 README 了：这是一个演示工作目录。", "usage": { "prompt_tokens": 200, "completion_tokens": 40 } }
+        ]
+      }
+    }
+  ]
+}

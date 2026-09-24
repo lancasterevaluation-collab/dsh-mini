@@ -1,0 +1,16 @@
+{
+  "id": "evolution",
+  "rows": [
+    {
+      "id": "evolution",
+      "plugin": "../src/plugins/evolution.ts",
+      "config": {
+        "memoryLimit": 8,
+        "nudgeRules": ["repeated-attempts", "stuck-tool", "near-step-limit", "guard-rejections"],
+        "skillsDir": "skills",
+        "inject": true,
+        "regressionProbes": ["read-only-tools", "guard-blocks-irreversible", "retry-classifies-auth"]
+      }
+    }
+  ]
+}

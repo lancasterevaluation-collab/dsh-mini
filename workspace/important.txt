@@ -1,0 +1,27 @@
+这份文件是用来演示「不可逆操作被守卫拦下」的。
+
+## 默认行为：删不掉
+
+    node src/apps/cli.ts "删掉 important.txt"
+
+模型请求 delete_file，然后被 guard 插件的 irreversibleGuard 拦下来
+（裁决是 ask，转人工），而 core bundle 里的审批人配置是 "approve": []，
+也就是一律拒绝。于是文件还在，模型收到一条失败结果：
+
+    操作被拒绝：即将执行不可逆操作：delete_file([["path","important.txt"]])。
+
+## 放开审批：真的删掉
+
+    node src/apps/cli.ts --patch patches/allow-delete.json "删掉 important.txt"
+
+这个 patch 做两件事：把 delete_file 放进 approve 白名单，并换掉 mock 脚本
+让它真的请求删除。跑完之后这个文件会**从工作目录里消失**。
+
+想恢复：
+
+    git checkout workspace/important.txt
+
+## 为什么值得这么设计
+
+危险能力必须被写出来，不能继承 —— 默认配置里 `approve: []` 意味着
+"没有任何操作会自动获批"，要放开哪一个就得显式写出来。这是第 10 步的核心取舍。

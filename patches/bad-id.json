@@ -1,0 +1,8 @@
+{
+  "patch": [
+    {
+      "id": "does-not-exist",
+      "config": {}
+    }
+  ]
+}

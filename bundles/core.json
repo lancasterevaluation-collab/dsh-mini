@@ -1,0 +1,60 @@
+{
+  "id": "core",
+  "rows": [
+    {
+      "id": "llm",
+      "plugin": "../src/plugins/llm.ts",
+      "config": {
+        "provider": "mock",
+        "model": "mock-offline",
+        "script": [
+          { "toolCalls": [{ "name": "list_dir", "arguments": { "path": "." } }] },
+          { "toolCalls": [{ "name": "read_file", "arguments": { "path": "README.md" } }] },
+          {
+            "content": "（mock 模型）我先列了目录，再读了 README.md。任务完成。",
+            "usage": { "prompt_tokens": 120, "completion_tokens": 30 }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tools",
+      "plugin": "../src/plugins/tools.ts",
+      "config": {
+        "workspace": "workspace",
+        "builtin": ["read_file", "list_dir", "write_file", "delete_file"]
+      }
+    },
+    {
+      "id": "session",
+      "plugin": "../src/plugins/session.ts",
+      "config": { "id": "cli", "savePath": "workspace/.sessions/cli.jsonl" }
+    },
+    {
+      "id": "retry",
+      "plugin": "../src/plugins/retry.ts",
+      "config": {
+        "mode": "normal",
+        "maxRetries": 3,
+        "budget": 6,
+        "backoff": { "initialDelayMs": 5, "maxDelayMs": 50, "jitterRatio": 0 }
+      }
+    },
+    {
+      "id": "guard",
+      "plugin": "../src/plugins/guard.ts",
+      "config": {
+        "rules": ["loop", "irreversible", "quota", "path"],
+        "loopThreshold": 3,
+        "maxCalls": 8,
+        "pathKey": "path",
+        "approve": []
+      }
+    },
+    {
+      "id": "agent-loop",
+      "plugin": "../src/plugins/agent-loop.ts",
+      "config": { "maxSteps": 8, "checkpoints": true }
+    }
+  ]
+}

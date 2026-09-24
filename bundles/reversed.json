@@ -1,0 +1,15 @@
+{
+  "id": "reversed",
+  "rows": [
+    {
+      "id": "greeter",
+      "plugin": "../src/plugins/demo-greeter.ts",
+      "config": { "prefix": "【顺序相反】" }
+    },
+    {
+      "id": "config",
+      "plugin": "../src/plugins/demo-config.ts",
+      "config": { "workspace": "D:/reversed", "model": "mock" }
+    }
+  ]
+}

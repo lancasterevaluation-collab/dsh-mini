@@ -1,0 +1,25 @@
+{
+  "patch": [
+    {
+      "id": "llm",
+      "config": {
+        "provider": "mock",
+        "model": "mock-offline",
+        "script": [
+          { "toolCalls": [{ "name": "delete_file", "arguments": { "path": "important.txt" } }] },
+          { "content": "已删除 important.txt。（这是放开审批后的结果）" }
+        ]
+      }
+    },
+    {
+      "id": "guard",
+      "config": {
+        "rules": ["loop", "irreversible", "quota", "path"],
+        "loopThreshold": 3,
+        "maxCalls": 8,
+        "pathKey": "path",
+        "approve": ["delete_file"]
+      }
+    }
+  ]
+}
